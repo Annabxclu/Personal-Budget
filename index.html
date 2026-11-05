@@ -147,6 +147,11 @@ textarea.inp{min-height:160px;font-family:ui-monospace,monospace;font-size:12px}
 .goal.done{border-color:var(--accent)}
 .ring{--p:0;width:64px;height:64px;border-radius:99px;background:conic-gradient(var(--accent) calc(var(--p)*1%),var(--chip) 0);display:grid;place-items:center;flex:none}
 .ring span{width:50px;height:50px;border-radius:99px;background:var(--card);display:grid;place-items:center;font-size:13px;font-weight:700}
+.nbreak{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;font-size:12.5px;color:var(--muted)}
+.nbreak b{display:block;color:var(--ink);font-size:15px;margin-top:1px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:99px;margin-right:5px;vertical-align:1px}
+.toggle{display:flex;gap:12px;align-items:flex-start;margin-top:16px;padding:12px;border:1px solid var(--line);border-radius:12px;cursor:pointer}
+.toggle input{width:22px;height:22px;accent-color:var(--accent);flex:none;margin:0}
 .tpl{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .tpl button{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:12px;text-align:left;cursor:pointer;display:flex;gap:10px;align-items:center;font-weight:500}
 .tpl button span{font-size:22px}
@@ -207,6 +212,8 @@ const acctById = id=>(S.settings?.accounts||[]).find(a=>a.id===id);
 const cats = (kind,all)=>(S.settings?.categories||[]).filter(c=>(!kind||c.kind===kind)&&(all||!c.hidden));
 const catById = id=>(S.settings?.categories||[]).find(c=>c.id===id);
 const isLiab = a=>a&&a.type in LIAB_TYPES;
+const CASH_TYPES=['checking','savings','mm','hysa','cash'];
+const isCash = a=>!!a&&!isLiab(a)&&(typeof a.cash==='boolean'?a.cash:CASH_TYPES.includes(a.type));
 const allTx = ()=>Object.values(S.months).flat();
 
 /* ---------- persistence ---------- */
@@ -486,15 +493,25 @@ function renderHome(){
 /* ---------- NET ASSETS ---------- */
 function renderAssets(){
   const act=accounts(),assets=act.filter(a=>!isLiab(a)),liabs=act.filter(isLiab);
-  const ta=assets.reduce((s,a)=>s+(+a.balance||0),0),tl=liabs.reduce((s,a)=>s+(+a.balance||0),0),net=ta-tl;
+  const cashA=assets.filter(isCash),nonCashA=assets.filter(a=>!isCash(a));
+  const sum=l=>l.reduce((s,a)=>s+(+a.balance||0),0);
+  const ta=sum(assets),tl=sum(liabs),net=ta-tl,tc=sum(cashA),tn=sum(nonCashA);
+  const cards=liabs.filter(a=>a.type==='credit'),tcc=sum(cards);
   const row=a=>`<div class="it" data-acct="${a.id}"><div class="ic">${TYPE[a.type]?.[1]||'•'}</div><div class="mid"><div class="t">${esc(a.name)}</div><div class="s">${TYPE[a.type]?.[0]||''}${a.updated?' · updated '+dayLabel(a.updated).replace(/^\w+, /,''):''}</div></div><div class="amt num ${isLiab(a)?'neg':''}">${money(a.balance)}</div></div>`;
   $('#app').innerHTML=banners()+header('Net Assets','')+`
   <div class="card"><p class="label">Net assets</p><div class="serif num big ${net<0?'neg':''}">${net<0?'−':''}${money(Math.abs(net))}</div>
-    <div class="row" style="justify-content:space-between;margin-top:10px;font-size:13.5px"><span>Assets <b class="pos num">${money(ta)}</b></span><span>Liabilities <b class="neg num">${money(tl)}</b></span></div>
-    ${ta+tl?`<div class="bar" style="height:10px;display:flex;background:var(--neg-soft)"><i style="width:${ta/(ta+tl)*100}%;border-radius:99px 0 0 99px"></i></div>`:''}
+    <div class="nbreak num">
+      <div><span class="dot" style="background:var(--accent)"></span>Cash<b>${money(tc)}</b></div>
+      <div><span class="dot" style="background:var(--accent);opacity:.4"></span>Non-cash<b>${money(tn)}</b></div>
+      <div><span class="dot" style="background:var(--neg)"></span>Liabilities<b class="neg">${money(tl)}</b></div>
+    </div>
+    ${ta+tl?`<div class="bar" style="height:10px;display:flex;background:var(--neg-soft)"><i style="width:${tc/(ta+tl)*100}%;border-radius:0"></i><i style="width:${tn/(ta+tl)*100}%;opacity:.4;border-radius:0"></i></div>`:''}
+    ${cards.length&&tc?`<p class="hint" style="margin-top:10px">Cash after paying off credit cards: <b class="num ${tc-tcc<0?'neg':''}">${tc-tcc<0?'−':''}${money(Math.abs(tc-tcc))}</b></p>`:''}
     ${act.length>1?'<button class="btn sm" id="payCard" style="width:100%;margin-top:14px;background:var(--accent-soft);color:var(--accent)">⇄ Pay card / Transfer</button>':''}</div>
-  <h2 class="sec">Assets <span class="num pos" style="text-transform:none">${money(ta)}</span></h2>
-  <div class="card list" style="padding:2px 14px">${assets.map(row).join('')||'<div class="empty">Add your bank, savings and brokerage accounts.</div>'}</div>
+  <h2 class="sec">Cash <span class="num pos" style="text-transform:none">${money(tc)}</span></h2>
+  <div class="card list" style="padding:2px 14px">${cashA.map(row).join('')||'<div class="empty">Add your checking, savings and money market accounts.</div>'}</div>
+  <h2 class="sec">Non-cash assets <span class="num" style="text-transform:none">${money(tn)}</span></h2>
+  <div class="card list" style="padding:2px 14px">${nonCashA.map(row).join('')||'<div class="empty">Add your brokerage, retirement or home value.</div>'}</div>
   <button class="btn ghost" id="addAsset">+ Add asset</button>
   <h2 class="sec">Liabilities <span class="num neg" style="text-transform:none">${money(tl)}</span></h2>
   <div class="card list" style="padding:2px 14px">${liabs.map(row).join('')||'<div class="empty">Add your mortgage and credit cards.</div>'}</div>
@@ -520,11 +537,15 @@ function openAcctSheet(a,liab){
     <label class="field"><span>${liab?'Amount owed':'Balance'}</span><input class="inp num" id="aBal" inputmode="decimal" value="${isNew?'':a.balance}" placeholder="0.00" style="font-size:22px"></label>
     <label class="field"><span>Name</span><input class="inp" id="aName" value="${esc(a.name)}" placeholder="${liab?'e.g. Chase Sapphire':'e.g. Ally High-Yield'}"></label>
     <label class="field"><span>Type</span><select class="inp" id="aType">${Object.entries(types).map(([k,v])=>`<option value="${k}" ${a.type===k?'selected':''}>${v[1]} ${v[0]}</option>`).join('')}</select></label>
+    ${liab?'':`<label class="toggle"><input type="checkbox" id="aCash" ${isCash(a)?'checked':''}><span><b>Counts as cash</b><br><span class="hint">Money you can spend right away. Turn off for investments, retirement, property.</span></span></label>`}
     <button class="btn primary" id="aSave">${isNew?'Add':'Save'}</button>
     ${!isNew?'<button class="btn danger" id="aDel" style="width:100%;margin-top:10px">Delete account</button>':''}`,p=>{
+    const cb=$('#aCash',p);let touched=false;
+    if(cb){cb.onchange=()=>touched=true;$('#aType',p).addEventListener('change',e=>{if(!touched)cb.checked=CASH_TYPES.includes(e.target.value)})}
     $('#aSave',p).onclick=()=>{
       const b=parseAmt($('#aBal',p).value);
-      a.type=$('#aType',p).value;a.name=$('#aName',p).value.trim()||TYPE[a.type][0];
+      a.type=$('#aType',p).value;
+      if(cb){if(cb.checked===CASH_TYPES.includes(a.type))delete a.cash;else a.cash=cb.checked}a.name=$('#aName',p).value.trim()||TYPE[a.type][0];
       const nb=isFinite(b)?Math.abs(b):0;if(isNew||nb!==a.balance)a.updated=today();a.balance=nb;
       if(isNew)S.settings.accounts.push(a);else S.settings.accounts=S.settings.accounts.map(x=>x.id===a.id?a:x);
       saveSettings();closeSheet();toast(isNew?'Added':'Updated');
