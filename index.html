@@ -18,12 +18,12 @@
 :root{
   --bg:#f5f2ec; --card:#fffdf9; --ink:#1e1d1a; --muted:#77736b; --line:#e6e1d7;
   --accent:#1f6f54; --accent-soft:#e1efe8; --neg:#b2472b; --neg-soft:#f6e3dc; --warn:#b7801c; --warn-soft:#f6ecd7;
-  --chip:#efebe3; --shadow:0 1px 2px rgba(30,29,26,.06),0 4px 16px rgba(30,29,26,.05);
+  --chip:#efebe3; --pos:#1f7a52; --on-accent:#fff; --shadow:0 1px 2px rgba(30,29,26,.06),0 4px 16px rgba(30,29,26,.05);
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#151513; --card:#1e1e1b; --ink:#efece6; --muted:#9a968d; --line:#2e2d29;
   --accent:#5dbb93; --accent-soft:#1f3329; --neg:#e7866a; --neg-soft:#3a2520; --warn:#e0b25a; --warn-soft:#3a3020;
-  --chip:#2a2926; --shadow:none;
+  --chip:#2a2926; --pos:#5dbb93; --on-accent:#fff; --shadow:none;
 }}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Instrument Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
@@ -56,7 +56,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--
 .inp{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 11px;outline:none;min-height:42px}
 .inp:focus{border-color:var(--accent)}
 .btn{border:0;border-radius:12px;padding:13px 16px;font-weight:600;cursor:pointer;background:var(--chip)}
-.btn.primary{background:var(--accent);color:#fff;width:100%;margin-top:18px;font-size:16px}
+.btn.primary{background:var(--accent);color:var(--on-accent);width:100%;margin-top:18px;font-size:16px}
 .btn.danger{background:var(--neg-soft);color:var(--neg)}
 .btn.ghost{background:transparent;border:1.5px dashed var(--line);width:100%;color:var(--muted)}
 .btn.sm{padding:8px 12px;font-size:13px;border-radius:10px}
@@ -67,7 +67,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--
 .it .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .it .s{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .it .amt{font-weight:600;white-space:nowrap}
-.pos{color:var(--accent)} .neg{color:var(--neg)} .mut{color:var(--muted)} .warn{color:var(--warn)}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .mut{color:var(--muted)} .warn{color:var(--warn)}
 .dayhead{font-size:12px;color:var(--muted);font-weight:600;margin:14px 4px 4px;display:flex;justify-content:space-between}
 .dayhead.sel{color:var(--accent)}
 .bar{height:7px;background:var(--chip);border-radius:99px;overflow:hidden;margin-top:6px}
@@ -102,7 +102,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--
 .cal .d .di{font-size:9.5px;font-weight:600;color:var(--accent);line-height:1.1}
 .cal .d.today .dn{box-shadow:inset 0 0 0 1.5px var(--accent);color:var(--accent)}
 .cal .d.sel{background:var(--accent-soft)}
-.cal .d.sel .dn{background:var(--accent);color:#fff;box-shadow:none}
+.cal .d.sel .dn{background:var(--accent);color:var(--on-accent);box-shadow:none}
 .cal .d.future{opacity:.45}
 .totals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .totals .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
@@ -153,6 +153,12 @@ textarea.inp{min-height:160px;font-family:ui-monospace,monospace;font-size:12px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:99px;margin-right:5px;vertical-align:1px}
 .toggle{display:flex;gap:12px;align-items:flex-start;margin-top:16px;padding:12px;border:1px solid var(--line);border-radius:12px;cursor:pointer}
 .toggle input{width:22px;height:22px;accent-color:var(--accent);flex:none;margin:0}
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px}
+.sw{border:2px solid transparent;border-radius:14px;padding:8px 4px;background:var(--chip);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.sw i{width:34px;height:34px;border-radius:99px;display:block;box-shadow:inset 0 0 0 3px rgba(255,255,255,.55)}
+.sw.on{border-color:var(--ink)}
+.sw input[type=color]{width:34px;height:34px;border:0;padding:0;background:none;border-radius:99px;cursor:pointer}
+.iconbtn{border:1px solid var(--line);background:var(--card);border-radius:99px;width:36px;height:36px;font-size:17px;cursor:pointer;display:grid;place-items:center}
 .tpl{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .tpl button{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:12px;text-align:left;cursor:pointer;display:flex;gap:10px;align-items:center;font-weight:500}
 .tpl button span{font-size:22px}
@@ -183,6 +189,50 @@ const DEFAULT_CATS = [
 const EMOJIS = ['🏠','🏡','🛒','💡','💊','🍽️','⛽','🚗','📶','🛡️','🔁','🛍️','🎟️','✈️','🔧','💇','🎁','🐶','👶','🎓','🏋️','☕','🍷','📚','💻','📱','🧾','💳','📦','💼','🌱','📈','➕','↩️','💰','❤️'];
 const NEAR = 0.8;
 
+/* ---------- appearance ---------- */
+const THEMES=[['green','Green','#1f6f54'],['pink','Pink','#d63c7a'],['rose','Rose','#c2557a'],['blue','Blue','#2563c9'],['purple','Purple','#7a4fd1'],['orange','Orange','#d4622a'],['teal','Teal','#0f8a80'],['slate','Slate','#4a5568']];
+const hexToRgb=h=>{h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);return [n>>16&255,n>>8&255,n&255]};
+const rgbToHex=a=>'#'+a.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,w)=>{const x=hexToRgb(a),y=hexToRgb(b);return rgbToHex(x.map((v,i)=>v*(1-w)+y[i]*w))};
+const lum=h=>{const [r,g,b]=hexToRgb(h).map(v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)});return .2126*r+.7152*g+.0722*b};
+function palette(hex,dark){
+  if(dark){
+    let acc=hex;while(lum(acc)<.22)acc=mix(acc,'#ffffff',.18);
+    return {bg:mix(hex,'#121212',.9),card:mix(hex,'#1b1b1b',.88),ink:mix(hex,'#f3f1ee',.9),muted:mix(hex,'#9c9a96',.8),line:mix(hex,'#2c2c2c',.82),
+      chip:mix(hex,'#262626',.84),accent:acc,'accent-soft':mix(hex,'#1b1b1b',.74),'on-accent':lum(acc)>.45?'#141414':'#ffffff'};
+  }
+  let acc=hex;while(lum(acc)>.3)acc=mix(acc,'#000000',.15);
+  return {bg:mix(hex,'#ffffff',.9),card:mix(hex,'#ffffff',.975),ink:mix(hex,'#1c1b1a',.86),muted:mix(hex,'#717070',.78),line:mix(hex,'#ffffff',.8),
+    chip:mix(hex,'#ffffff',.86),accent:acc,'accent-soft':mix(hex,'#ffffff',.82),'on-accent':'#ffffff'};
+}
+const darkMQ=window.matchMedia?matchMedia('(prefers-color-scheme: dark)'):null;
+function currentAppearance(){
+  let a=S&&S.settings&&S.settings.appearance;
+  if(!a){try{a=JSON.parse(localStorage.getItem('ledger_appearance')||'null')}catch(e){}}
+  return Object.assign({theme:'green',mode:'auto',custom:'#e05a9c'},a||{});
+}
+function applyAppearance(a){
+  a=a||currentAppearance();
+  const dark=a.mode==='dark'||(a.mode==='auto'&&darkMQ&&darkMQ.matches);
+  const root=document.documentElement.style;
+  const keys=['bg','card','ink','muted','line','chip','accent','accent-soft','on-accent'];
+  if(a.theme==='green'){keys.forEach(k=>root.removeProperty('--'+k));document.documentElement.style.colorScheme=a.mode==='auto'?'':(dark?'dark':'light');
+    // classic palette lives in the stylesheet; force light/dark when not on auto
+    if(a.mode!=='auto'){const p=dark?{bg:'#151513',card:'#1e1e1b',ink:'#efece6',muted:'#9a968d',line:'#2e2d29',chip:'#2a2926',accent:'#5dbb93','accent-soft':'#1f3329','on-accent':'#fff'}
+      :{bg:'#f5f2ec',card:'#fffdf9',ink:'#1e1d1a',muted:'#77736b',line:'#e6e1d7',chip:'#efebe3',accent:'#1f6f54','accent-soft':'#e1efe8','on-accent':'#fff'};keys.forEach(k=>root.setProperty('--'+k,p[k]))}
+  }else{
+    const hex=a.theme==='custom'?a.custom:(THEMES.find(t=>t[0]===a.theme)||THEMES[0])[2];
+    const p=palette(hex,dark);keys.forEach(k=>root.setProperty('--'+k,p[k]));
+  }
+  // semantic colors follow light/dark
+  const sem=dark?{neg:'#e7866a','neg-soft':'#3a2520',warn:'#e0b25a','warn-soft':'#3a3020',pos:'#5dbb93',shadow:'none'}
+    :{neg:'#b2472b','neg-soft':'#f6e3dc',warn:'#b7801c','warn-soft':'#f6ecd7',pos:'#1f7a52',shadow:'0 1px 2px rgba(30,29,26,.06),0 4px 16px rgba(30,29,26,.05)'};
+  if(a.mode==='auto'&&a.theme==='green')Object.keys(sem).forEach(k=>root.removeProperty('--'+k));else Object.entries(sem).forEach(([k,v])=>root.setProperty('--'+k,v));
+  document.documentElement.style.colorScheme=dark?'dark':'light';
+  const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()||'#f5f2ec');
+}
+if(darkMQ&&darkMQ.addEventListener)darkMQ.addEventListener('change',()=>applyAppearance());
+
 /* ---------- helpers ---------- */
 const $ = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -206,6 +256,7 @@ const clone = o=>JSON.parse(JSON.stringify(o));
 const S = {settings:null, months:{}, mode:'loading', settingsConfirmed:false, stale:false, readOnly:false,
   tab:'home', viewMonth:curMonth(), selDay:today()};
 let db=null, uid=null, settingsRef=null, monthsCol=null;
+try{applyAppearance()}catch(e){}
 const pending={}; let pendingSettings=0; const queues={};
 
 const accounts = ()=>(S.settings?.accounts||[]).filter(a=>!a.archived);
@@ -353,6 +404,7 @@ function banners(){
 }
 function refresh(){if($('#sheet').classList.contains('open'))return;render()}
 function render(){
+  try{applyAppearance()}catch(e){}
   const app=$('#app');
   if(!S.settings){app.innerHTML=banners()+(S.stale?'':'<div class="spin"></div>');$('#tabs').style.display='none';return}
   $('#tabs').style.display='';
@@ -477,7 +529,7 @@ function renderHome(){
       <span class="b num">${b?(st==='over'?`<span class="neg">${money(sp-b)} over</span>`:`${money(b-sp)} left of ${money(b)}`):'No budget set'}</span>
       ${b?`<div class="bar"><i class="${st==='over'?'over':st==='near'?'near':''}" style="width:${pct}%"></i></div>`:''}
     </button>`}).join('');
-  $('#app').innerHTML=banners()+header('Home',monthLabel(k))+`
+  $('#app').innerHTML=banners()+header('Home',`${monthLabel(k)} <button class="iconbtn" id="openLook" aria-label="Appearance" style="display:inline-grid;vertical-align:middle;margin-left:8px">🎨</button>`)+`
   <div class="card"><div class="row" style="justify-content:space-between;align-items:baseline">
     <div><p class="label">Spent this month</p><div class="serif num big">${money(m.spent)}</div></div>
     ${tb?`<div style="text-align:right"><p class="label">Budget</p><div class="num">${money(tb)}</div></div>`:''}</div>
@@ -488,6 +540,7 @@ function renderHome(){
   <div class="boxes">${boxes}<button class="box add" id="addCat"><span class="e">＋</span>Add type</button></div>`;
   $$('[data-cat]').forEach(b=>b.onclick=()=>S.editHome?openCatSheet(catById(b.dataset.cat)):openEntrySheet({cat:b.dataset.cat}));
   $('#addCat').onclick=()=>openCatSheet(null,'expense');
+  $('#openLook').onclick=openAppearance;
   const ai=$('#addInc');if(ai)ai.onclick=()=>openEntrySheet({kind:'income'});
   $('#editHome').onclick=()=>{S.editHome=!S.editHome;render()};
 }
@@ -520,7 +573,7 @@ function renderAssets(){
   <button class="btn ghost" id="addLiab">+ Add liability</button>
   <p class="hint" style="padding:0 4px;margin-top:12px">Balances update automatically when you pick an account on an expense or income. Tap an account to correct its balance, for example when the brokerage value changes.</p>
   <h2 class="sec">More</h2>
-  <div class="card list" style="padding:2px 14px"><div class="it" id="openExport"><div class="ic">⤓</div><div class="mid"><div class="t">Export transactions</div><div class="s">Copy as CSV for a spreadsheet</div></div><div class="mut">›</div></div>
+  <div class="card list" style="padding:2px 14px"><div class="it" id="openLook2"><div class="ic">🎨</div><div class="mid"><div class="t">Appearance</div><div class="s">Colors and dark mode</div></div><div class="mut">›</div></div><div class="it" id="openExport"><div class="ic">⤓</div><div class="mid"><div class="t">Export transactions</div><div class="s">Copy as CSV for a spreadsheet</div></div><div class="mut">›</div></div>
   ${S.mode==='local'?`<div class="it" id="backup"><div class="ic">💾</div><div class="mid"><div class="t">Back up data</div><div class="s">Save a file with everything${lastBackup()?' · last backup '+lastBackup():''}</div></div><div class="mut">›</div></div>
   <label class="it" id="restoreRow"><div class="ic">↺</div><div class="mid"><div class="t">Restore from backup</div><div class="s">Load a backup file (replaces what's here)</div></div><div class="mut">›</div><input type="file" id="restoreFile" accept=".json,application/json" hidden></label>`:''}
   </div>
@@ -531,6 +584,7 @@ function renderAssets(){
   $('#addLiab').onclick=()=>openAcctSheet(null,true);
   const pc=$('#payCard');if(pc)pc.onclick=()=>openTransferSheet(null);
   $('#openExport').onclick=openExport;
+  $('#openLook2').onclick=openAppearance;
 }
 function openAcctSheet(a,liab){
   const isNew=!a;a=a?clone(a):{id:genId(),name:'',type:liab?'credit':'checking',balance:0};
@@ -615,6 +669,29 @@ function openTransferSheet(tx){
     if(!tx)setTimeout(()=>amt.focus(),50);
   });
 }
+function openAppearance(){
+  const a=currentAppearance();
+  const draw=p=>{
+    $('#lookBody',p).innerHTML=`
+      <div class="field"><span>Mode</span><div class="seg">${[['auto','Auto'],['light','Light'],['dark','Dark']].map(([k,l])=>`<button type="button" data-mode="${k}" class="${a.mode===k?'on':''}">${l}</button>`).join('')}</div>
+      <p class="hint">${a.mode==='auto'?'Auto follows your phone’s light or dark setting.':a.mode==='dark'?'Always dark.':'Always light, even when your phone is in dark mode.'}</p></div>
+      <div class="field"><span>Color</span><div class="swatches">
+        ${THEMES.map(([k,l,h])=>`<button type="button" class="sw ${a.theme===k?'on':''}" data-theme="${k}"><i style="background:${h}"></i>${l}</button>`).join('')}
+        <label class="sw ${a.theme==='custom'?'on':''}" id="swCustom"><input type="color" id="customColor" value="${a.custom}">Custom</label>
+      </div><p class="hint">Tap Custom to pick any color you like.</p></div>`;
+    $$('[data-mode]',p).forEach(b=>b.onclick=()=>{a.mode=b.dataset.mode;commit();draw(p)});
+    $$('[data-theme]',p).forEach(b=>b.onclick=()=>{a.theme=b.dataset.theme;commit();draw(p)});
+    const cc=$('#customColor',p);
+    cc.addEventListener('input',()=>{a.theme='custom';a.custom=cc.value;applyAppearance(a);$$('.sw',p).forEach(x=>x.classList.toggle('on',x.id==='swCustom'))});
+    cc.addEventListener('change',()=>{a.theme='custom';a.custom=cc.value;commit()});
+  };
+  const commit=()=>{
+    applyAppearance(a);
+    try{localStorage.setItem('ledger_appearance',JSON.stringify(a))}catch(e){}
+    if(S.settings){S.settings.appearance={...a};saveSettings()}
+  };
+  openSheet('Appearance','<div id="lookBody"></div><button class="btn primary" id="lookDone">Done</button>',p=>{draw(p);$('#lookDone',p).onclick=closeSheet});
+}
 function openExport(){
   const q=s=>`"${String(s??'').replace(/"/g,'""')}"`;
   const rows=allTx().filter(t=>['expense','income','transfer'].includes(t.kind)).sort((a,b)=>a.date<b.date?-1:1).map(t=>[t.date,t.kind,catById(t.cat)?.name||'',acctById(t.acct)?.name||'',acctById(t.to)?.name||'',t.kind==='expense'?-t.amount:t.amount,t.note||''].map(q).join(','));
@@ -658,7 +735,7 @@ function renderTx(){
   $('#app').innerHTML=banners()+header('Transactions','')+monthSwitch()+`
   <div class="card" style="padding:12px 10px"><div class="cal">${cells}</div>
     <div class="row" style="margin-top:12px;padding:0 4px"><div style="flex:1"><div style="font-weight:600">${dayLabel(S.selDay,true)}</div><div class="hint" style="margin:0">${sel?`${sel.s?money(sel.s)+' spent':''}${sel.s&&sel.i?' · ':''}${sel.i?money(sel.i)+' income':''}`:'Nothing entered'}</div></div>
-    <button class="btn sm" id="addInc2">+ Income</button><button class="btn sm" id="addExp" style="background:var(--accent);color:#fff">+ Expense</button></div>
+    <button class="btn sm" id="addInc2">+ Income</button><button class="btn sm" id="addExp" style="background:var(--accent);color:var(--on-accent)">+ Expense</button></div>
   </div>
   <div class="totals">
     <div class="stat"><div class="k">Income</div><div class="v serif num pos">${money(m.income)}</div></div>
@@ -755,7 +832,7 @@ function renderGoals(){
       <div class="bar"><i style="width:${pct}%"></i></div>
       <div class="gm num"><span><b class="serif" style="font-size:20px">${money(g.saved)}</b> <span class="mut">of ${money(g.target)}</span></span><span class="mut">${Math.round(pct)}%</span></div>
       ${p.perMonth&&!p.done?`<div class="hint">${p.thisMonth>=p.perMonth?`<span class="pos">✓ ${money(p.thisMonth)} added this month — on track</span>`:`${money(p.thisMonth)} added this month · ${money(p.perMonth-p.thisMonth)} more to stay on track`}</div>`:''}
-      <div class="acts"><button class="btn sm" data-wd="${g.id}">− Withdraw</button><button class="btn sm" data-add="${g.id}" style="background:var(--accent);color:#fff">+ Add money</button></div>
+      <div class="acts"><button class="btn sm" data-wd="${g.id}">− Withdraw</button><button class="btn sm" data-add="${g.id}" style="background:var(--accent);color:var(--on-accent)">+ Add money</button></div>
     </div>`};
   $('#app').innerHTML=banners()+header('Savings Goals','')+
   (gs.length?`<div class="card"><div class="row" style="gap:14px"><div class="ring" style="--p:${tTarget?Math.min(100,tSaved/tTarget*100):0}"><span class="num">${tTarget?Math.round(tSaved/tTarget*100):0}%</span></div>
