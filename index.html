@@ -196,6 +196,10 @@ textarea.inp{min-height:160px;font-family:ui-monospace,monospace;font-size:12px}
 .env .bar{height:8px;margin-top:8px}
 .env .acts{display:flex;gap:8px;padding:0 16px 16px;position:relative}
 .env .acts .btn{flex:1}
+.brow .prev{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-top:8px;background:var(--bg);border-radius:8px;padding:6px 9px}
+.brow .prev b{color:var(--ink);font-weight:600}
+.brow .prev .tag{margin-left:2px}
+.brow .prev .link{white-space:nowrap;flex:none}
 .alrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
 .alrow:first-child{border-top:0}
 .tpl{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
@@ -431,7 +435,11 @@ function monthSummary(k){
 }
 function status(spent,budget){if(!budget)return 'none';const r=spent/budget;return r>1?'over':r>=NEAR?'near':'ok'}
 const statusText={ok:'On track',near:'Near budget',over:'Over budget',none:'No budget'};
-const totalBudget=()=>cats('expense').reduce((s,c)=>s+(+c.budget||0),0);
+// Budgets are per month: a value set for a month carries forward until a later month changes it.
+function budgetKey(c,k){let best=null;for(const key in (c.budgets||{}))if(key<=k&&(best===null||key>best))best=key;return best}
+function budgetFor(c,k){if(!c)return 0;const key=budgetKey(c,k);return key!==null?(+c.budgets[key]||0):(+c.budget||0)}
+function setBudget(c,k,v){c.budgets=Object.assign({},c.budgets||{},{[k]:v})}
+const totalBudget=(k=curMonth())=>cats('expense').reduce((s,c)=>s+budgetFor(c,k),0);
 
 /* ---------- shell ---------- */
 function banners(){
@@ -490,10 +498,10 @@ function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
     const amtEl=$('#fAmt',p);
     const note=()=>{
       const cc=catById(f.cat);const el=$('#budgetNote',p);
-      if(f.kind!=='expense'||!cc||!cc.budget){el.innerHTML='';return}
-      const k=mkey(f.date||today());let spent=monthSummary(k).byCat[cc.id]||0;if(tx&&tx.kind==='expense'&&tx.cat===cc.id&&mkey(tx.date)===k)spent-=tx.amount;
-      const a=parseAmt(amtEl.value);const after=spent+(a>0?a:0);const st=status(after,cc.budget);
-      el.innerHTML=`${esc(cc.name)}: ${money(after)} of ${money(cc.budget)} ${a>0?'after this':'so far'} · <span class="tag ${st}">${statusText[st]}</span>`;
+      const k=mkey(f.date||today());const bb=budgetFor(cc,k);
+      if(f.kind!=='expense'||!cc||!bb){el.innerHTML='';return}let spent=monthSummary(k).byCat[cc.id]||0;if(tx&&tx.kind==='expense'&&tx.cat===cc.id&&mkey(tx.date)===k)spent-=tx.amount;
+      const a=parseAmt(amtEl.value);const after=spent+(a>0?a:0);const st=status(after,bb);
+      el.innerHTML=`${esc(cc.name)}: ${money(after)} of ${money(bb)} ${a>0?'after this':'so far'} · <span class="tag ${st}">${statusText[st]}</span>`;
     };
     const acctNote=()=>{
       const el=$('#acctNote',p);if(!el)return;const a=acctById(f.acct);if(!a){el.innerHTML='';return}
@@ -521,8 +529,9 @@ function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
       if(tx){t.id=tx.id;t.created=tx.created;updateTx(tx,t);closeSheet();toast('Saved');return}
       const saved=addTx(t);closeSheet();
       const cc=catById(t.cat);let msg=`Added ${money(t.amount)} · ${cc?.name||''}`;
-      if(t.kind==='expense'&&cc?.budget){const sp=monthSummary(mkey(t.date)).byCat[cc.id]||0;const st=status(sp,cc.budget);
-        msg=st==='over'?`${cc.name} is ${money(sp-cc.budget)} over budget`:st==='near'?`${cc.name}: ${money(cc.budget-sp)} left — near budget`:`${cc.name}: ${money(cc.budget-sp)} left this month`}
+      const bb=cc?budgetFor(cc,mkey(t.date)):0;
+      if(t.kind==='expense'&&bb){const sp=monthSummary(mkey(t.date)).byCat[cc.id]||0;const st=status(sp,bb);
+        msg=st==='over'?`${cc.name} is ${money(sp-bb)} over budget`:st==='near'?`${cc.name}: ${money(bb-sp)} left — near budget`:`${cc.name}: ${money(bb-sp)} left this month`}
       const ia=acctById(t.acct);
       if(t.kind==='income'&&ia&&isCash(ia)){toast(`${money(t.amount)} added to Ready to allocate`,'Allocate',()=>{setTab('goals');openAllocateSheet()});return}
       toast(msg,'Undo',()=>{removeTx(saved);render()});
@@ -542,13 +551,13 @@ function openCatSheet(c,kind='expense'){
   openSheet(isNew?(c.kind==='income'?'New income type':'New expense type'):'Edit type',`
     <label class="field"><span>Name</span><input class="inp" id="cName" value="${esc(c.name)}" placeholder="e.g. Pets"></label>
     <div class="field"><span>Icon</span><div class="emo-pick">${EMOJIS.map(e=>`<button type="button" class="${e===c.emo?'on':''}" data-e="${e}">${e}</button>`).join('')}</div></div>
-    ${c.kind==='expense'?`<label class="field"><span>Monthly budget</span><input class="inp num" id="cBud" inputmode="decimal" value="${c.budget||''}" placeholder="No limit"></label>`:''}
+    ${c.kind==='expense'?`<label class="field"><span>Monthly budget${isNew?'':' (from this month on)'}</span><input class="inp num" id="cBud" inputmode="decimal" value="${budgetFor(c,curMonth())||''}" placeholder="No limit"></label>`:''}
     <button class="btn primary" id="cSave">${isNew?'Add':'Save'}</button>
     ${!isNew?`<button class="btn danger" id="cDel" style="width:100%;margin-top:10px">Delete type</button><p class="hint">${used?'You have entries in this type. They will keep it in your history, but it will not appear as a box or in budgets.':''}</p>`:''}`,p=>{
     $$('[data-e]',p).forEach(b=>b.onclick=()=>{c.emo=b.dataset.e;$$('[data-e]',p).forEach(x=>x.classList.toggle('on',x===b))});
     $('#cSave',p).onclick=()=>{
       c.name=$('#cName',p).value.trim();if(!c.name)return toast('Give it a name');
-      if(c.kind==='expense'){const b=parseAmt($('#cBud',p).value);c.budget=isFinite(b)?Math.max(0,b):0}
+      if(c.kind==='expense'){const b=parseAmt($('#cBud',p).value),nb=isFinite(b)?Math.max(0,b):0;if(isNew)c.budget=nb;else if(nb!==budgetFor(c,curMonth()))setBudget(c,curMonth(),nb)}
       if(isNew)S.settings.categories.push(c);else S.settings.categories=S.settings.categories.map(x=>x.id===c.id?c:x);
       saveSettings();closeSheet();toast(isNew?`${c.name} added`:'Saved');
     };
@@ -561,9 +570,9 @@ function openCatSheet(c,kind='expense'){
 
 /* ---------- HOME ---------- */
 function renderHome(){
-  const k=curMonth(),m=monthSummary(k),tb=totalBudget();
+  const k=curMonth(),m=monthSummary(k),tb=totalBudget(k);
   const boxes=cats('expense').map(c=>{
-    const sp=m.byCat[c.id]||0,b=+c.budget||0,st=status(sp,b),pct=b?Math.min(100,sp/b*100):0;
+    const sp=m.byCat[c.id]||0,b=budgetFor(c,k),st=status(sp,b),pct=b?Math.min(100,sp/b*100):0;
     return `<button class="box ${st==='over'?'over':st==='near'?'near':''} ${S.editHome?'editing':''}" data-cat="${c.id}">
       <span class="plus">${S.editHome?'✎':'+'}</span><span class="e">${esc(c.emo)}</span><span class="n">${esc(c.name)}</span>
       <span class="v serif num">${money(sp)}</span>
@@ -853,13 +862,21 @@ let budgetTimers={};
 function renderBudget(){
   const k=S.viewMonth,m=monthSummary(k);
   const list=cats('expense');
-  const tb=totalBudget(),tsp=list.reduce((s,c)=>s+(m.byCat[c.id]||0),0);
+  const tb=totalBudget(k),tsp=list.reduce((s,c)=>s+(m.byCat[c.id]||0),0);
+  const pk=shiftMonth(k,-1),pm=monthSummary(pk),pName=monthLabel(pk).split(' ')[0].slice(0,3);
+  const ptb=totalBudget(pk),ptsp=list.reduce((s,c)=>s+(pm.byCat[c.id]||0),0);
+  const used3=[1,2,3].map(i=>shiftMonth(k,-i)).filter(x=>(S.months[x]||[]).length);
+  const avg3=id=>used3.length>=2?used3.reduce((s,x)=>s+(monthSummary(x).byCat[id]||0),0)/used3.length:0;
   const counts={over:0,near:0};
   const rows=list.map(c=>{
-    const sp=m.byCat[c.id]||0,b=+c.budget||0,st=status(sp,b);if(st in counts)counts[st]++;
+    const sp=m.byCat[c.id]||0,b=budgetFor(c,k),st=status(sp,b);if(st in counts)counts[st]++;
+    const psp=pm.byCat[c.id]||0,pb=budgetFor(c,pk),pst=status(psp,pb),av=avg3(c.id);
+    const prevH=(psp||pb)?`<div class="prev num"><span><b>${pName}:</b> ${money(psp)}${pb?` of ${money(pb)}`:''} ${pb?`<span class="tag ${pst}">${pst==='over'?'Over '+money(psp-pb):pst==='near'?'Near':'Under'}</span>`:''}${av>0&&Math.abs(av-psp)>0.5?`<br><span style="font-size:11.5px">Avg last ${used3.length} months: ${money(av)}</span>`:''}</span>
+      ${psp&&Math.round(psp)!==Math.round(b)?`<button class="link" data-use="${c.id}" data-v="${Math.round(psp)}">Use ${money(Math.round(psp)).replace('.00','')}</button>`:''}</div>`:'';
     return `<div class="brow" data-c="${c.id}"><div class="top">
       <div class="nm" data-edit="${c.id}"><span style="font-size:20px">${esc(c.emo)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="mut" style="font-size:13px">✎</span></div>
       <input class="inp num bin" inputmode="decimal" data-bud="${c.id}" value="${b||''}" placeholder="Set budget" aria-label="${esc(c.name)} monthly budget"></div>
+      ${prevH}
       ${b?`<div class="bar"><i class="${st==='over'?'over':st==='near'?'near':''}" style="width:${Math.min(100,sp/b*100)}%"></i></div>`:''}
       <div class="meta num"><span>${money(sp)} spent${b?` · ${st==='over'?money(sp-b)+' over':money(b-sp)+' left'}`:''}</span><span class="tag ${st}">${statusText[st]}</span></div>
     </div>`}).join('');
@@ -869,10 +886,11 @@ function renderBudget(){
     <div style="text-align:right"><p class="label">Spent</p><div class="num ${tsp>tb&&tb?'neg':''}" style="font-size:18px">${money(tsp)}</div></div></div>
     ${tb?`<div class="bar"><i class="${status(tsp,tb)==='over'?'over':status(tsp,tb)==='near'?'near':''}" style="width:${Math.min(100,tsp/tb*100)}%"></i></div>
     <p class="hint">${tsp>tb?money(tsp-tb)+' over':money(tb-tsp)+' left'}${counts.over?` · <span class="neg">${counts.over} over</span>`:''}${counts.near?` · <span class="warn">${counts.near} near</span>`:''}</p>`:'<p class="hint">Enter a monthly amount for each type below.</p>'}
+    ${ptsp||ptb?`<p class="hint" style="border-top:1px solid var(--line);padding-top:8px;margin-top:10px">${monthLabel(pk).split(' ')[0]}: spent <b class="num">${money(ptsp)}</b>${ptb?` of <b class="num">${money(ptb)}</b> — ${ptsp>ptb?`<span class="neg">${money(ptsp-ptb)} over</span>`:`${money(ptb-ptsp)} under`}`:''}</p>`:''}
   </div>
   <div class="card" style="padding:4px 14px">${rows}</div>
   <button class="btn ghost" id="addCat2">+ Add expense type</button>
-  <p class="hint" style="padding:0 4px">"Near budget" means 80% or more is used. Budgets apply to every month. Tap ✎ to rename, change the icon or delete a type.</p>
+  <p class="hint" style="padding:0 4px">"Near budget" means 80% or more is used. Each month's budget carries over to the next until you change it, so set December and it stays for January too. Tap ✎ to rename, change the icon or delete a type.</p>
   <h2 class="sec">Income types</h2>
   <div class="card list" style="padding:2px 14px">${cats('income').map(c=>`<div class="it" data-edit="${c.id}"><div class="ic">${esc(c.emo)}</div><div class="mid"><div class="t">${esc(c.name)}</div></div><div class="mut">›</div></div>`).join('')}</div>
   <button class="btn ghost" id="addIncCat">+ Add income type</button>`;
@@ -883,13 +901,14 @@ function renderBudget(){
   $$('[data-bud]').forEach(inp=>{
     const commit=()=>{
       const id=inp.dataset.bud,v=parseAmt(inp.value),nb=isFinite(v)?Math.max(0,v):0;
-      const c=catById(id);if(!c||(+c.budget||0)===nb)return;
-      c.budget=nb;saveSettings();
+      const c=catById(id);if(!c||budgetFor(c,S.viewMonth)===nb)return;
+      setBudget(c,S.viewMonth,nb);saveSettings();
       const y=window.scrollY;render();window.scrollTo(0,y);
     };
     inp.addEventListener('change',commit);
     inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur()});
   });
+  $$('[data-use]').forEach(b=>b.onclick=()=>{const i=$(`[data-bud="${b.dataset.use}"]`);i.value=b.dataset.v;i.dispatchEvent(new Event('change'))});
 }
 
 /* ---------- GOALS & ENVELOPES ---------- */
