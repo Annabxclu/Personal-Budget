@@ -2,7 +2,7 @@
 
 A simple, private budgeting app you fill in by hand. No bank linking.
 
-**Open it:** https://annabxclu.github.io/personal-budget/
+**Open it:** https://annabxclu.github.io/Personal-Budget/
 
 ## Tabs
 
