@@ -176,6 +176,11 @@ textarea.inp{min-height:160px;font-family:ui-monospace,monospace;font-size:12px}
 .yr td:first-child,.yr th:first-child{text-align:left}
 .ysum{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 12px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
 .ysum b{display:block;color:var(--ink);font-size:13.5px;text-transform:none;letter-spacing:0;margin-top:1px}
+.ab{display:flex;flex-direction:column;gap:4px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:13.5px}
+.ab div{display:flex;justify-content:space-between}
+.ab span{color:var(--muted)}
+.alrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.alrow:first-child{border-top:0}
 .tpl{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .tpl button{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:12px;text-align:left;cursor:pointer;display:flex;gap:10px;align-items:center;font-weight:500}
 .tpl button span{font-size:22px}
@@ -501,6 +506,8 @@ function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
       const cc=catById(t.cat);let msg=`Added ${money(t.amount)} · ${cc?.name||''}`;
       if(t.kind==='expense'&&cc?.budget){const sp=monthSummary(mkey(t.date)).byCat[cc.id]||0;const st=status(sp,cc.budget);
         msg=st==='over'?`${cc.name} is ${money(sp-cc.budget)} over budget`:st==='near'?`${cc.name}: ${money(cc.budget-sp)} left — near budget`:`${cc.name}: ${money(cc.budget-sp)} left this month`}
+      const ia=acctById(t.acct);
+      if(t.kind==='income'&&ia&&isCash(ia)){toast(`${money(t.amount)} added to Ready to allocate`,'Allocate',()=>{setTab('goals');openAllocateSheet()});return}
       toast(msg,'Undo',()=>{removeTx(saved);render()});
     };
     const del=$('#fDel',p);if(del){let armed=false;del.onclick=()=>{if(!armed){armed=true;del.textContent='Tap again to delete';return}removeTx(tx);closeSheet();toast('Deleted','Undo',()=>{restoreTx(tx);render()})}}
@@ -553,11 +560,13 @@ function renderHome(){
     ${tb?`<div class="bar"><i class="${status(m.spent,tb)==='over'?'over':status(m.spent,tb)==='near'?'near':''}" style="width:${Math.min(100,m.spent/tb*100)}%"></i></div>
     <p class="hint">${m.spent>tb?`${money(m.spent-tb)} over your total budget`:`${money(tb-m.spent)} left to spend`}</p>`:''}
   </div>
+  ${(()=>{const A=allocation();return A.hasCash&&A.ready>=1?`<div class="card" id="readyNudge" style="padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;border-color:var(--accent)"><span style="font-size:22px">💰</span><div style="flex:1"><b class="num">${money(A.ready)}</b> ready to allocate<div class="hint" style="margin:0">Give it a job in your envelopes</div></div><span class="mut">›</span></div>`:A.hasCash&&A.ready<=-1?`<div class="card" id="readyNudge" style="padding:12px 16px;cursor:pointer;border-color:var(--neg)"><span class="neg">Envelopes are ${money(-A.ready)} more than your cash</span> ›</div>`:''})()}
   <h2 class="sec">${S.editHome?'Tap a box to rename or delete':'Tap a box to add an expense'} <span>${S.editHome?'':'<button class="link" id="addInc">+ Income</button> · '}<button class="link" id="editHome">${S.editHome?'Done':'Edit'}</button></span></h2>
   <div class="boxes">${boxes}<button class="box add" id="addCat"><span class="e">＋</span>Add type</button></div>`;
   $$('[data-cat]').forEach(b=>b.onclick=()=>S.editHome?openCatSheet(catById(b.dataset.cat)):openEntrySheet({cat:b.dataset.cat}));
   $('#addCat').onclick=()=>openCatSheet(null,'expense');
   $('#openLook').onclick=openAppearance;
+  const rn=$('#readyNudge');if(rn)rn.onclick=()=>setTab('goals');
   const ai=$('#addInc');if(ai)ai.onclick=()=>openEntrySheet({kind:'income'});
   $('#editHome').onclick=()=>{S.editHome=!S.editHome;render()};
 }
@@ -866,11 +875,12 @@ function renderBudget(){
   });
 }
 
-/* ---------- GOALS ---------- */
-const GOAL_TEMPLATES=[['Vacation','✈️'],['Emergency fund','🛟'],['Home project','🔨'],['New car','🚗'],['Holidays & gifts','🎄'],['Big purchase','🛍️']];
-const GOAL_EMOJIS=['✈️','🏝️','🛟','🔨','🏡','🚗','🎄','🎁','💍','🎓','👶','🐶','💻','🛋️','🏖️','⛷️','🎉','💰','🩺','📦'];
+/* ---------- GOALS & ENVELOPES ---------- */
+const GOAL_TEMPLATES=[['Emergency fund','🛟',false],['Vacation','✈️',true],['Bills buffer','🧾',false],['Car repairs','🔧',false],['Holidays & gifts','🎄',true],['Fun money','🎉',false]];
+const GOAL_EMOJIS=['✈️','🏝️','🛟','🧾','🔧','🔨','🏡','🚗','🎄','🎁','💍','🎓','👶','🐶','💻','🛋️','🏖️','⛷️','🎉','💰','🩺','📦','🛒','💡'];
 const goals=()=>S.settings?.goals||[];
 const goalById=id=>goals().find(g=>g.id===id);
+const hasTarget=g=>(+g.target||0)>0;
 function monthsUntil(date){
   if(!date)return null;const[y,m]=date.split('-').map(Number);const n=new Date();
   return Math.max(0,(y-n.getFullYear())*12+(m-1-n.getMonth()));
@@ -879,91 +889,171 @@ function goalPlan(g){
   const left=Math.max(0,(+g.target||0)-(+g.saved||0));
   const mo=monthsUntil(g.date);
   const k=curMonth();const thisMonth=(g.log||[]).filter(l=>!l.start&&mkey(l.d)===k).reduce((s,l)=>s+l.amt,0);
-  const done=g.target>0&&g.saved>=g.target;
+  const done=hasTarget(g)&&g.saved>=g.target;
   let perMonth=null,msg='';
-  if(done)msg='Goal reached 🎉';
+  if(!hasTarget(g))msg='Envelope';
+  else if(done)msg='Goal reached 🎉';
   else if(g.date){
     if(g.date<today())msg=`Target date passed · ${money(left)} to go`;
     else{perMonth=(left+Math.max(0,thisMonth))/Math.max(1,mo);msg=`Save ${money(perMonth)}/month to reach it by ${new Date(g.date+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`}
   }else msg=`${money(left)} to go`;
-  // this month's contributions
-  return {left,perMonth,msg,done,thisMonth,mo};
+  const due=perMonth&&!done?Math.max(0,Math.round((perMonth-thisMonth)*100)/100):0;
+  return {left,perMonth,msg,done,thisMonth,mo,due};
 }
 function saveGoals(list){S.settings.goals=list;saveSettings()}
+// Ready to allocate = cash accounts − credit card balances − money already in envelopes
+function allocation(){
+  const act=accounts();
+  const cash=act.filter(isCash).reduce((s,a)=>s+(+a.balance||0),0);
+  const cards=act.filter(a=>a.type==='credit').reduce((s,a)=>s+Math.max(0,+a.balance||0),0);
+  const env=goals().filter(g=>!g.archived).reduce((s,g)=>s+(+g.saved||0),0);
+  const hasCash=act.some(isCash);
+  return {cash,cards,env,hasCash,ready:Math.round((cash-cards-env)*100)/100};
+}
+function readyCardHTML(){
+  const A=allocation();
+  if(!A.hasCash)return `<div class="card"><p class="label">Ready to allocate</p><p class="hint" style="margin:0">Add your checking, savings or money market accounts on <b>Net Assets</b>. The money in them shows up here so you can give every dollar a job.</p></div>`;
+  const neg=A.ready<0;
+  return `<div class="card" style="${A.ready>0?'border-color:var(--accent)':neg?'border-color:var(--neg)':''}">
+    <p class="label">Ready to allocate</p>
+    <div class="serif num big ${neg?'neg':A.ready>0?'pos':''}">${neg?'−':''}${money(Math.abs(A.ready))}</div>
+    <p class="hint" style="margin-top:4px">${neg?'You’ve put more into envelopes than you have. Take some out of an envelope to fix it.':A.ready>0?'This money doesn’t have a job yet.':'Every dollar has a job. 👏'}</p>
+    <div class="ab num">
+      <div><span>Cash in accounts</span><b>${money(A.cash)}</b></div>
+      ${A.cards?`<div><span>Set aside for credit cards</span><b>−${money(A.cards)}</b></div>`:''}
+      <div><span>In envelopes</span><b>−${money(A.env)}</b></div>
+    </div>
+    <button class="btn primary" id="allocBtn" style="margin-top:14px">${A.ready>0?'Allocate money':'Move money between envelopes'}</button>
+  </div>`;
+}
 function renderGoals(){
   const gs=goals().filter(g=>!g.archived);
-  const tSaved=gs.reduce((s,g)=>s+(+g.saved||0),0),tTarget=gs.reduce((s,g)=>s+(+g.target||0),0);
-  const tMonthly=gs.reduce((s,g)=>s+(goalPlan(g).perMonth||0),0);
-  const tThis=gs.reduce((s,g)=>s+goalPlan(g).thisMonth,0);
+  const withT=gs.filter(hasTarget);
+  const tMonthly=withT.reduce((s,g)=>s+(goalPlan(g).perMonth||0),0);
+  const tThis=withT.reduce((s,g)=>s+Math.max(0,goalPlan(g).thisMonth),0);
   const card=g=>{
-    const p=goalPlan(g),pct=g.target?Math.min(100,g.saved/g.target*100):0;
+    const p=goalPlan(g),t=hasTarget(g),pct=t?Math.min(100,g.saved/g.target*100):0;
     return `<div class="goal ${p.done?'done':''}">
-      <div class="gh" data-g="${g.id}"><div class="ge">${esc(g.emo)}</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:16px">${esc(g.name)}</div><div class="hint" style="margin:0">${p.done?'<span class="tag ok">Goal reached 🎉</span>':esc(p.msg)}</div></div><span class="mut">›</span></div>
-      <div class="bar"><i style="width:${pct}%"></i></div>
-      <div class="gm num"><span><b class="serif" style="font-size:20px">${money(g.saved)}</b> <span class="mut">of ${money(g.target)}</span></span><span class="mut">${Math.round(pct)}%</span></div>
-      ${p.perMonth&&!p.done?`<div class="hint">${p.thisMonth>=p.perMonth?`<span class="pos">✓ ${money(p.thisMonth)} added this month — on track</span>`:`${money(p.thisMonth)} added this month · ${money(p.perMonth-p.thisMonth)} more to stay on track`}</div>`:''}
-      <div class="acts"><button class="btn sm" data-wd="${g.id}">− Withdraw</button><button class="btn sm" data-add="${g.id}" style="background:var(--accent);color:var(--on-accent)">+ Add money</button></div>
+      <div class="gh" data-g="${g.id}"><div class="ge">${esc(g.emo)}</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:16px">${esc(g.name)}</div><div class="hint" style="margin:0">${p.done?'<span class="tag ok">Goal reached 🎉</span>':t?esc(p.msg):'<span class="tag none">Envelope</span>'}</div></div>
+        ${t?'':`<b class="serif num" style="font-size:20px">${money(g.saved)}</b>`}<span class="mut">›</span></div>
+      ${t?`<div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="gm num"><span><b class="serif" style="font-size:20px">${money(g.saved)}</b> <span class="mut">of ${money(g.target)}</span></span><span class="mut">${Math.round(pct)}%</span></div>`:''}
+      ${p.perMonth&&!p.done?`<div class="hint">${p.due<=0?`<span class="pos">✓ ${money(p.thisMonth)} added this month — on track</span>`:`${money(Math.max(0,p.thisMonth))} added this month · ${money(p.due)} more to stay on track`}</div>`:''}
+      <div class="acts"><button class="btn sm" data-wd="${g.id}">− Take out</button><button class="btn sm" data-add="${g.id}" style="background:var(--accent);color:var(--on-accent)">+ Add money</button></div>
     </div>`};
-  $('#app').innerHTML=banners()+header('Savings Goals','')+
-  (gs.length?`<div class="card"><div class="row" style="gap:14px"><div class="ring" style="--p:${tTarget?Math.min(100,tSaved/tTarget*100):0}"><span class="num">${tTarget?Math.round(tSaved/tTarget*100):0}%</span></div>
-    <div style="flex:1"><p class="label" style="margin-bottom:2px">Saved toward goals</p><div class="serif num" style="font-size:26px">${money(tSaved)}</div><div class="hint" style="margin:0">of ${money(tTarget)} across ${gs.length} goal${gs.length>1?'s':''}</div></div></div>
-    ${tMonthly?`<div class="row" style="justify-content:space-between;margin-top:14px;font-size:13.5px;border-top:1px solid var(--line);padding-top:12px"><span>Plan to set aside</span><b class="num">${money(tMonthly)}/month</b></div><div class="row" style="justify-content:space-between;font-size:13.5px;margin-top:4px"><span class="mut">Added this month</span><span class="num ${tThis>=tMonthly?'pos':''}">${money(tThis)}</span></div>`:''}
-  </div>${gs.map(card).join('')}<button class="btn ghost" id="newGoal">+ New goal</button>`
-  :`<div class="card"><p style="margin:0 0 4px;font-weight:600">Plan for the things you want</p><p class="hint" style="margin:0 0 14px">Set a target and a date, and the app works out how much to put aside each month. Pick one to start:</p>
-    <div class="tpl">${GOAL_TEMPLATES.map(([n,e])=>`<button data-tpl="${esc(n)}" data-e="${e}"><span>${e}</span>${esc(n)}</button>`).join('')}</div>
-    <button class="btn ghost" id="newGoal" style="margin-top:10px">+ Custom goal</button></div>`);
+  $('#app').innerHTML=banners()+header('Goals','Envelopes')+readyCardHTML()+
+  (gs.length?`${tMonthly?`<div class="card" style="padding:12px 16px"><div class="row" style="justify-content:space-between;font-size:13.5px"><span>Goal plans this month</span><b class="num">${money(tMonthly)}</b></div><div class="row" style="justify-content:space-between;font-size:13.5px;margin-top:4px"><span class="mut">Added so far</span><span class="num ${tThis>=tMonthly?'pos':''}">${money(tThis)}</span></div></div>`:''}
+    <h2 class="sec">Your envelopes</h2>${gs.map(card).join('')}<button class="btn ghost" id="newGoal">+ New envelope or goal</button>`
+  :`<div class="card"><p style="margin:0 0 4px;font-weight:600">Give your money a job</p><p class="hint" style="margin:0 0 14px">Make envelopes for what your cash is for. Give one a target and date to turn it into a savings goal. Pick some to start:</p>
+    <div class="tpl">${GOAL_TEMPLATES.map(([n,e,t])=>`<button data-tpl="${esc(n)}" data-e="${e}" data-t="${t?1:0}"><span>${e}</span>${esc(n)}</button>`).join('')}</div>
+    <button class="btn ghost" id="newGoal" style="margin-top:10px">+ Make your own</button></div>`);
   $('#newGoal').onclick=()=>openGoalSheet(null);
-  $$('[data-tpl]').forEach(b=>b.onclick=()=>openGoalSheet(null,{name:b.dataset.tpl,emo:b.dataset.e}));
+  const ab=$('#allocBtn');if(ab)ab.onclick=openAllocateSheet;
+  $$('[data-tpl]').forEach(b=>b.onclick=()=>openGoalSheet(null,{name:b.dataset.tpl,emo:b.dataset.e,goal:b.dataset.t==='1'}));
   $$('[data-g]').forEach(el=>el.onclick=()=>openGoalSheet(goalById(el.dataset.g)));
   $$('[data-add]').forEach(b=>b.onclick=()=>openMoneySheet(goalById(b.dataset.add),1));
   $$('[data-wd]').forEach(b=>b.onclick=()=>openMoneySheet(goalById(b.dataset.wd),-1));
 }
+function openAllocateSheet(){
+  const gs=goals().filter(g=>!g.archived);
+  const A=allocation();
+  if(!gs.length){openGoalSheet(null);return}
+  const amts={};
+  const rows=gs.map(g=>{const p=goalPlan(g);return `<div class="alrow">
+    <div class="ge" style="width:38px;height:38px;font-size:19px;border-radius:12px">${esc(g.emo)}</div>
+    <div style="flex:1;min-width:0"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.name)}</div>
+      <div class="hint num" style="margin:0">${money(g.saved)}${hasTarget(g)?' of '+money(g.target):''}${p.due>0?` · <button class="link" data-plan="${g.id}" data-v="${p.due}">+${money(p.due)} plan</button>`:''}</div></div>
+    <input class="inp num" data-al="${g.id}" inputmode="decimal" placeholder="0" style="width:100px;text-align:right">
+  </div>`}).join('');
+  const hasPlans=gs.some(g=>goalPlan(g).due>0);
+  openSheet('Allocate money',`
+    <div class="card" style="background:var(--bg);margin:8px 0 6px;padding:12px 14px"><div class="row" style="justify-content:space-between;align-items:baseline"><span class="label" style="margin:0">Left to allocate</span><b class="serif num" id="alLeft" style="font-size:24px"></b></div></div>
+    <p class="hint" style="margin:0 0 6px">Type an amount for each envelope. Use a minus sign (−50) to take money out and free it up.</p>
+    ${hasPlans?'<button class="btn sm" id="fillPlans" style="width:100%;margin:6px 0 4px">Fill goal plans for this month</button>':''}
+    <div>${rows}</div>
+    <button class="btn primary" id="alSave">Allocate</button>`,p=>{
+    const upd=()=>{
+      let sum=0;$$('[data-al]',p).forEach(i=>{const v=parseAmt(i.value);amts[i.dataset.al]=isFinite(v)?v:0;sum+=amts[i.dataset.al]});
+      const left=Math.round((A.ready-sum)*100)/100;const el=$('#alLeft',p);
+      el.textContent=(left<0?'−':'')+money(Math.abs(left));el.className='serif num '+(left<0?'neg':left>0?'pos':'');
+    };
+    $$('[data-al]',p).forEach(i=>i.addEventListener('input',upd));
+    $$('[data-plan]',p).forEach(b=>b.onclick=()=>{const i=$(`[data-al="${b.dataset.plan}"]`,p);i.value=b.dataset.v;upd()});
+    const fp=$('#fillPlans',p);if(fp)fp.onclick=()=>{$$('[data-plan]',p).forEach(b=>{$(`[data-al="${b.dataset.plan}"]`,p).value=b.dataset.v});upd()};
+    upd();
+    $('#alSave',p).onclick=()=>{
+      upd();
+      const moves=Object.entries(amts).filter(([,v])=>v);
+      if(!moves.length)return toast('Enter an amount for at least one envelope');
+      let total=0;
+      const list=goals().map(g=>{
+        let v=amts[g.id];if(!v)return g;
+        if(v<0)v=-Math.min(-v,g.saved);if(!v)return g;
+        total+=v;
+        return {...g,saved:Math.round((g.saved+v)*100)/100,log:(g.log||[]).concat([{d:today(),amt:v,note:v>0?'Allocated':'Moved out'}])};
+      });
+      saveGoals(list);closeSheet();
+      const r=allocation().ready;
+      toast(r<0?`Allocated — now ${money(-r)} over. Take some back out.`:`Allocated ${money(total)} · ${money(r)} left to allocate`);
+    };
+  });
+}
 function openGoalSheet(g,preset){
   const isNew=!g;g=g?clone(g):{id:genId(),name:preset?.name||'',emo:preset?.emo||'💰',target:0,saved:0,date:'',log:[],created:Date.now()};
   const log=(g.log||[]).slice().sort((a,b)=>a.d<b.d?1:-1);
-  openSheet(isNew?'New goal':`${esc(g.emo)} ${esc(g.name)}`,`
-    <label class="field"><span>Goal name</span><input class="inp" id="gName" value="${esc(g.name)}" placeholder="e.g. Italy trip"></label>
+  const showTarget=!isNew?hasTarget(g):!!preset?.goal;
+  openSheet(isNew?'New envelope':`${esc(g.emo)} ${esc(g.name)}`,`
+    <label class="field"><span>Name</span><input class="inp" id="gName" value="${esc(g.name)}" placeholder="e.g. Italy trip, Emergency fund"></label>
     <div class="field"><span>Icon</span><div class="emo-pick">${GOAL_EMOJIS.map(e=>`<button type="button" class="${e===g.emo?'on':''}" data-e="${e}">${e}</button>`).join('')}</div></div>
-    <div class="row"><label class="field"><span>Target amount</span><input class="inp num" id="gTarget" inputmode="decimal" value="${g.target||''}" placeholder="5,000"></label>
-    <label class="field"><span>Target date (optional)</span><input type="date" class="inp" id="gDate" value="${g.date||''}"></label></div>
-    ${isNew?`<label class="field"><span>Already saved (optional)</span><input class="inp num" id="gSaved" inputmode="decimal" placeholder="0.00"></label>`:''}
+    <label class="toggle"><input type="checkbox" id="gHasT" ${showTarget?'checked':''}><span><b>Saving toward a target</b><br><span class="hint">Turn on to set an amount and date. The app works out what to put in each month.</span></span></label>
+    <div id="gTWrap" style="${showTarget?'':'display:none'}"><div class="row"><label class="field"><span>Target amount</span><input class="inp num" id="gTarget" inputmode="decimal" value="${g.target||''}" placeholder="5,000"></label>
+    <label class="field"><span>Target date (optional)</span><input type="date" class="inp" id="gDate" value="${g.date||''}"></label></div></div>
+    ${isNew?`<label class="field"><span>Put in now (optional)</span><input class="inp num" id="gSaved" inputmode="decimal" placeholder="0.00"></label><p class="hint">Comes out of Ready to allocate (${money(allocation().ready)}).</p>`:''}
     <div id="gCalc" class="hint" style="min-height:18px;margin-top:10px"></div>
-    <button class="btn primary" id="gSave">${isNew?'Create goal':'Save'}</button>
-    ${!isNew?`${log.length?`<h2 class="sec">History</h2><div class="list">${log.map(l=>`<div class="it" style="cursor:default"><div class="ic">${l.amt>0?'＋':'−'}</div><div class="mid"><div class="t">${l.amt>0?'Added':'Withdrew'}</div><div class="s">${dayLabel(l.d)}${l.note?' · '+esc(l.note):''}</div></div><div class="amt num ${l.amt>0?'pos':'neg'}">${l.amt>0?'+':'−'}${money(Math.abs(l.amt))}</div></div>`).join('')}</div>`:''}
-      <button class="btn danger" id="gDel" style="width:100%;margin-top:16px">Delete goal</button>`:''}`,p=>{
+    <button class="btn primary" id="gSave">${isNew?'Create':'Save'}</button>
+    ${!isNew?`${log.length?`<h2 class="sec">History</h2><div class="list">${log.map(l=>`<div class="it" style="cursor:default"><div class="ic">${l.amt>0?'＋':'−'}</div><div class="mid"><div class="t">${l.amt>0?'Added':'Took out'}</div><div class="s">${dayLabel(l.d)}${l.note?' · '+esc(l.note):''}</div></div><div class="amt num ${l.amt>0?'pos':'neg'}">${l.amt>0?'+':'−'}${money(Math.abs(l.amt))}</div></div>`).join('')}</div>`:''}
+      <button class="btn danger" id="gDel" style="width:100%;margin-top:16px">Delete envelope</button><p class="hint">Any money in it goes back to Ready to allocate.</p>`:''}`,p=>{
     $$('[data-e]',p).forEach(b=>b.onclick=()=>{g.emo=b.dataset.e;$$('[data-e]',p).forEach(x=>x.classList.toggle('on',x===b))});
+    const ht=$('#gHasT',p);
     const calc=()=>{const t=parseAmt($('#gTarget',p).value),d=$('#gDate',p).value,sv=isNew?(parseAmt($('#gSaved',p).value)||0):g.saved;
-      if(t>0&&d&&d>today()){const mo=Math.max(1,monthsUntil(d));$('#gCalc',p).innerHTML=`That's about <b>${money(Math.max(0,t-sv)/mo)}/month</b> for ${mo} month${mo>1?'s':''}.`}else $('#gCalc',p).innerHTML=''};
+      if(ht.checked&&t>0&&d&&d>today()){const mo=Math.max(1,monthsUntil(d));$('#gCalc',p).innerHTML=`That's about <b>${money(Math.max(0,t-sv)/mo)}/month</b> for ${mo} month${mo>1?'s':''}.`}else $('#gCalc',p).innerHTML=''};
+    ht.onchange=()=>{$('#gTWrap',p).style.display=ht.checked?'':'none';calc()};
     ['#gTarget','#gDate','#gSaved'].forEach(s=>{const el=$(s,p);el&&el.addEventListener('input',calc)});calc();
     $('#gSave',p).onclick=()=>{
-      g.name=$('#gName',p).value.trim();if(!g.name)return toast('Give your goal a name');
-      const t=parseAmt($('#gTarget',p).value);if(!(t>0))return toast('Enter a target amount');
-      g.target=t;g.date=$('#gDate',p).value||'';
+      g.name=$('#gName',p).value.trim();if(!g.name)return toast('Give it a name');
+      if(ht.checked){const t=parseAmt($('#gTarget',p).value);if(!(t>0))return toast('Enter a target amount');g.target=t;g.date=$('#gDate',p).value||''}
+      else{g.target=0;g.date=''}
       if(isNew){const sv=parseAmt($('#gSaved',p).value);if(sv>0){g.saved=sv;g.log=[{d:today(),amt:sv,note:'Starting amount',start:true}]}}
       const list=goals().slice();if(isNew)list.push(g);else list.splice(list.findIndex(x=>x.id===g.id),1,g);
-      saveGoals(list);closeSheet();toast(isNew?`${g.name} goal created`:'Saved');
+      saveGoals(list);closeSheet();toast(isNew?`${g.name} created`:'Saved');
     };
-    const d=$('#gDel',p);if(d){let armed=false;d.onclick=()=>{if(!armed){armed=true;d.textContent='Tap again to delete';return}saveGoals(goals().filter(x=>x.id!==g.id));closeSheet();toast('Goal deleted')}}
+    const d=$('#gDel',p);if(d){let armed=false;d.onclick=()=>{if(!armed){armed=true;d.textContent='Tap again to delete';return}saveGoals(goals().filter(x=>x.id!==g.id));closeSheet();toast('Deleted')}}
     if(isNew&&!g.name)setTimeout(()=>$('#gName',p).focus(),50);
   });
 }
 function openMoneySheet(g,sign){
-  openSheet(sign>0?`Add to ${esc(g.name)}`:`Withdraw from ${esc(g.name)}`,`
+  const ready=allocation().ready;
+  openSheet(sign>0?`Add to ${esc(g.name)}`:`Take out of ${esc(g.name)}`,`
     <div class="amount-wrap"><span class="cur serif">$</span><input id="mAmt" inputmode="decimal" autocomplete="off" placeholder="0.00" aria-label="Amount"></div>
     <div id="mAfter" class="hint" style="text-align:center;min-height:18px"></div>
+    ${sign>0&&ready>0?`<div style="text-align:center"><button class="link" id="mAll">Use all ${money(ready)} ready to allocate</button></div>`:''}
     <label class="field"><span>Date</span><input type="date" class="inp" id="mDate" value="${today()}"></label>
-    <label class="field"><span>Note (optional)</span><input class="inp" id="mNote" placeholder="${sign>0?'e.g. Moved from paycheck':'e.g. Booked flights'}"></label>
-    <button class="btn primary" id="mSave">${sign>0?'Add money':'Withdraw'}</button>`,p=>{
+    <label class="field"><span>Note (optional)</span><input class="inp" id="mNote" placeholder="${sign>0?'e.g. From paycheck':'e.g. Booked flights'}"></label>
+    <p class="hint">${sign>0?'Comes out of Ready to allocate.':'Goes back to Ready to allocate. If you spent it, also enter the expense so your account balance drops.'}</p>
+    <button class="btn primary" id="mSave">${sign>0?'Add money':'Take out'}</button>`,p=>{
     const a=$('#mAmt',p);
-    a.addEventListener('input',()=>{const v=parseAmt(a.value);if(v>0){const ns=Math.max(0,g.saved+sign*v);$('#mAfter',p).innerHTML=`New total ${money(ns)} of ${money(g.target)} · ${Math.round(Math.min(100,ns/g.target*100))}%`}else $('#mAfter',p).innerHTML=''});
+    const after=()=>{const v=parseAmt(a.value);if(v>0){const ns=Math.max(0,g.saved+sign*v),r=ready-sign*Math.min(v,sign<0?g.saved:v);
+      $('#mAfter',p).innerHTML=`${esc(g.name)}: ${money(ns)}${hasTarget(g)?` of ${money(g.target)}`:''} · Ready to allocate: <span class="${r<0?'neg':''}">${r<0?'−':''}${money(Math.abs(r))}</span>`}else $('#mAfter',p).innerHTML=''};
+    a.addEventListener('input',after);
+    const all=$('#mAll',p);if(all)all.onclick=()=>{a.value=ready;after()};
     a.addEventListener('keydown',e=>{if(e.key==='Enter')$('#mSave',p).click()});
     $('#mSave',p).onclick=()=>{
       let v=parseAmt(a.value);if(!(v>0))return toast('Enter an amount');
       if(sign<0)v=Math.min(v,g.saved);
       const ng=clone(g);ng.saved=Math.round((ng.saved+sign*v)*100)/100;ng.log=(ng.log||[]).concat([{d:$('#mDate',p).value||today(),amt:sign*v,note:$('#mNote',p).value.trim()}]);
-      const wasDone=g.saved>=g.target;
+      const wasDone=hasTarget(g)&&g.saved>=g.target;
       saveGoals(goals().map(x=>x.id===g.id?ng:x));closeSheet();
-      toast(!wasDone&&ng.saved>=ng.target?`🎉 ${ng.name} goal reached!`:sign>0?`Added ${money(v)} to ${ng.name}`:`Withdrew ${money(v)}`);
+      toast(hasTarget(ng)&&!wasDone&&ng.saved>=ng.target?`🎉 ${ng.name} goal reached!`:sign>0?`Added ${money(v)} to ${ng.name}`:`Took ${money(v)} out of ${ng.name}`);
     };
     setTimeout(()=>a.focus(),50);
   });

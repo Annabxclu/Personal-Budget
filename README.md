@@ -10,7 +10,7 @@ A simple, private budgeting app you fill in by hand. No bank linking.
 - **Net Assets** lists your accounts and their balances (money market, savings, brokerage) and your liabilities (mortgage, credit cards). When you pick an account on an expense or income, its balance updates automatically. **Pay card / Transfer** records a credit card payment or a move between accounts without counting it as spending.
 - **Transactions** has a calendar at the top. Tap a day to add an expense or income for it. Below the calendar are the month's income, expenses and net, then every transaction.
 - **Budget** is where you set a monthly budget for each expense type and see whether each one is on track, near budget or over.
-- **Goals** holds savings goals (vacation, emergency fund and so on), each with a target and a date. It shows how much to set aside each month.
+- **Goals** works like envelope budgeting. **Ready to allocate** is the money in your cash accounts, minus credit card balances, minus what's already in envelopes. New income lands there until you allocate it. Envelopes can be simple (Emergency fund, Fun money) or savings goals with a target and date, which show how much to set aside each month.
 
 ## Put it on your phone
 
