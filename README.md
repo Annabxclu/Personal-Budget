@@ -7,7 +7,7 @@ A simple, private budgeting app you fill in by hand. No bank linking.
 ## Tabs
 
 - **Home** has a box for each expense type (Household, Groceries, Utilities, Health and so on). Tap a box to log an expense. Boxes turn gold when you're near budget and red when you're over.
-- **Net Assets** lists your accounts and their balances (money market, savings, brokerage) and your liabilities (mortgage, credit cards).
+- **Net Assets** lists your accounts and their balances (money market, savings, brokerage) and your liabilities (mortgage, credit cards). When you pick an account on an expense or income, its balance updates automatically. **Pay card / Transfer** records a credit card payment or a move between accounts without counting it as spending.
 - **Transactions** has a calendar at the top. Tap a day to add an expense or income for it. Below the calendar are the month's income, expenses and net, then every transaction.
 - **Budget** is where you set a monthly budget for each expense type and see whether each one is on track, near budget or over.
 - **Goals** holds savings goals (vacation, emergency fund and so on), each with a target and a date. It shows how much to set aside each month.

@@ -292,10 +292,34 @@ async function init(){
 }
 
 /* ---------- tx ops ---------- */
-function addTx(t){t.id=genId();t.created=Date.now();const k=mkey(t.date);(S.months[k]=S.months[k]||[]).push(t);saveMonth(k);return t}
-function removeTx(t){const k=mkey(t.date);S.months[k]=(S.months[k]||[]).filter(x=>x.id!==t.id);saveMonth(k)}
-function restoreTx(t){const k=mkey(t.date);(S.months[k]=S.months[k]||[]).push(t);saveMonth(k)}
-function updateTx(old,nt){const ko=mkey(old.date),kn=mkey(nt.date);S.months[ko]=(S.months[ko]||[]).filter(x=>x.id!==old.id);(S.months[kn]=S.months[kn]||[]).push(nt);saveMonth(ko);if(kn!==ko)saveMonth(kn)}
+// Expenses, income and transfers that name an account move that account's balance.
+function acctDelta(id,assetDelta){
+  const a=(S.settings?.accounts||[]).find(x=>x.id===id);if(!a||!assetDelta)return false;
+  a.balance=Math.round(((+a.balance||0)+(isLiab(a)?-assetDelta:assetDelta))*100)/100;a.updated=today();return true;
+}
+function applyEffect(t,sign){
+  if(!t||!S.settings)return false;
+  if(t.kind==='expense')return acctDelta(t.acct,-t.amount*sign);
+  if(t.kind==='income')return acctDelta(t.acct,t.amount*sign);
+  if(t.kind==='transfer'){const a=acctDelta(t.acct,-t.amount*sign),b=acctDelta(t.to,t.amount*sign);return a||b}
+  return false;
+}
+function addTx(t){t.id=genId();t.created=Date.now();const k=mkey(t.date);(S.months[k]=S.months[k]||[]).push(t);saveMonth(k);if(applyEffect(t,1))saveSettings();return t}
+function removeTx(t){const k=mkey(t.date);S.months[k]=(S.months[k]||[]).filter(x=>x.id!==t.id);saveMonth(k);if(applyEffect(t,-1))saveSettings()}
+function restoreTx(t){const k=mkey(t.date);(S.months[k]=S.months[k]||[]).push(t);saveMonth(k);if(applyEffect(t,1))saveSettings()}
+function updateTx(old,nt){const ko=mkey(old.date),kn=mkey(nt.date);S.months[ko]=(S.months[ko]||[]).filter(x=>x.id!==old.id);(S.months[kn]=S.months[kn]||[]).push(nt);saveMonth(ko);if(kn!==ko)saveMonth(kn);
+  const a=applyEffect(old,-1),b=applyEffect(nt,1);if(a||b)saveSettings()}
+function lastAcct(kind){
+  let v=null;try{v=localStorage.getItem('ledger_lastAcct_'+kind)}catch(e){}
+  if(v!==null&&(v===''||accounts().some(a=>a.id===v)))return v;
+  const pick=kind==='expense'?accounts().find(a=>a.type==='credit'):accounts().find(a=>['checking','savings','mm','hysa'].includes(a.type));
+  return pick?pick.id:'';
+}
+function rememberAcct(kind,id){try{localStorage.setItem('ledger_lastAcct_'+kind,id||'')}catch(e){}}
+function acctSelect(id,sel,blank){
+  const list=accounts().slice();const cur=acctById(sel);if(cur&&!list.includes(cur))list.push(cur);
+  return `<select class="inp" id="${id}">${blank?`<option value="">${blank}</option>`:''}${list.map(a=>`<option value="${a.id}" ${a.id===sel?'selected':''}>${TYPE[a.type]?.[1]||''} ${esc(a.name)}</option>`).join('')}</select>`;
+}
 
 /* ---------- calculations ---------- */
 function monthSummary(k){
@@ -348,7 +372,7 @@ $('#sheet').addEventListener('click',e=>{if(e.target.id==='sheet')closeSheet()})
 
 /* ---------- entry sheet (add / edit transaction) ---------- */
 function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
-  const f=tx?{kind:tx.kind==='income'?'income':'expense',amount:String(tx.amount),date:tx.date,cat:tx.cat||null,note:tx.note||''}:{kind,amount:'',date,cat,note:''};
+  const f=tx?{kind:tx.kind==='income'?'income':'expense',amount:String(tx.amount),date:tx.date,cat:tx.cat||null,note:tx.note||'',acct:tx.acct||''}:{kind,amount:'',date,cat,note:'',acct:lastAcct(kind)};
   const fixedCat=!tx&&cat;
   const draw=p=>{
     const c=catById(f.cat);
@@ -358,6 +382,8 @@ function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
       <div class="amount-wrap"><span class="cur serif">$</span><input id="fAmt" inputmode="decimal" autocomplete="off" placeholder="0.00" value="${esc(f.amount)}" aria-label="Amount"></div>
       <div id="budgetNote" class="hint" style="text-align:center;min-height:18px;margin:-2px 0 10px"></div>
       ${fixedCat?'':`<div class="cats">${list.map(x=>`<button type="button" class="cat ${x.id===f.cat?'on':''}" data-cat="${x.id}"><span class="e">${esc(x.emo)}</span><span class="n">${esc(x.name)}</span></button>`).join('')}</div>`}
+      ${accounts().length?`<label class="field"><span>${f.kind==='income'?'Deposited to':'Paid with'}</span>${acctSelect('fAcct',f.acct,"Don't update an account")}</label><div id="acctNote" class="hint"></div>`
+        :'<p class="hint">Tip: add your accounts on Net Assets and their balances will update as you enter expenses.</p>'}
       <label class="field"><span>Date</span><input type="date" class="inp" id="fDate" value="${f.date}"></label>
       <label class="field"><span>Note (optional)</span><input class="inp" id="fNote" value="${esc(f.note)}" placeholder="e.g. Costco run"></label>
       <button type="button" class="btn primary" id="fSave">${tx?'Save changes':'Add '+f.kind}</button>
@@ -370,12 +396,20 @@ function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
       const a=parseAmt(amtEl.value);const after=spent+(a>0?a:0);const st=status(after,cc.budget);
       el.innerHTML=`${esc(cc.name)}: ${money(after)} of ${money(cc.budget)} ${a>0?'after this':'so far'} · <span class="tag ${st}">${statusText[st]}</span>`;
     };
-    note();
-    amtEl.addEventListener('input',()=>{f.amount=amtEl.value;note()});
+    const acctNote=()=>{
+      const el=$('#acctNote',p);if(!el)return;const a=acctById(f.acct);if(!a){el.innerHTML='';return}
+      let bal=+a.balance||0;
+      if(tx&&tx.acct===a.id){const od=tx.kind==='income'?tx.amount:-tx.amount;bal-=isLiab(a)?-od:od}
+      const v=parseAmt(amtEl.value),d=v>0?(f.kind==='income'?v:-v):0,nb=bal+(isLiab(a)?-d:d);
+      el.innerHTML=`${esc(a.name)} ${isLiab(a)?'owed':'balance'}: ${money(bal)}${v>0?` → <b class="num">${money(nb)}</b>`:''}`;
+    };
+    note();acctNote();
+    const fa=$('#fAcct',p);if(fa)fa.onchange=()=>{f.acct=fa.value;acctNote()};
+    amtEl.addEventListener('input',()=>{f.amount=amtEl.value;note();acctNote()});
     amtEl.addEventListener('keydown',e=>{if(e.key==='Enter')$('#fSave',p).click()});
     $('#fDate',p).addEventListener('input',e=>{f.date=e.target.value;note()});
     $('#fNote',p).addEventListener('input',e=>f.note=e.target.value);
-    $$('[data-kind]',p).forEach(b=>b.onclick=()=>{if(f.kind===b.dataset.kind)return;f.kind=b.dataset.kind;f.cat=null;draw(p)});
+    $$('[data-kind]',p).forEach(b=>b.onclick=()=>{if(f.kind===b.dataset.kind)return;f.kind=b.dataset.kind;f.cat=null;if(!tx)f.acct=lastAcct(f.kind);f.amount=amtEl.value;draw(p)});
     $$('[data-cat]',p).forEach(b=>b.onclick=()=>{f.cat=b.dataset.cat;$$('[data-cat]',p).forEach(x=>x.classList.toggle('on',x===b));note()});
     $('#fSave',p).onclick=()=>{
       const amt=parseAmt(amtEl.value);
@@ -383,6 +417,8 @@ function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
       if(!f.cat)return toast('Pick a type');
       if(!f.date)return toast('Pick a date');
       const t={kind:f.kind,amount:amt,date:f.date,cat:f.cat,note:(f.note||'').trim()};
+      if(f.acct&&acctById(f.acct))t.acct=f.acct;
+      if(!tx)rememberAcct(f.kind,f.acct);
       if(tx){t.id=tx.id;t.created=tx.created;updateTx(tx,t);closeSheet();toast('Saved');return}
       const saved=addTx(t);closeSheet();
       const cc=catById(t.cat);let msg=`Added ${money(t.amount)} · ${cc?.name||''}`;
@@ -455,14 +491,15 @@ function renderAssets(){
   $('#app').innerHTML=banners()+header('Net Assets','')+`
   <div class="card"><p class="label">Net assets</p><div class="serif num big ${net<0?'neg':''}">${net<0?'−':''}${money(Math.abs(net))}</div>
     <div class="row" style="justify-content:space-between;margin-top:10px;font-size:13.5px"><span>Assets <b class="pos num">${money(ta)}</b></span><span>Liabilities <b class="neg num">${money(tl)}</b></span></div>
-    ${ta+tl?`<div class="bar" style="height:10px;display:flex;background:var(--neg-soft)"><i style="width:${ta/(ta+tl)*100}%;border-radius:99px 0 0 99px"></i></div>`:''}</div>
+    ${ta+tl?`<div class="bar" style="height:10px;display:flex;background:var(--neg-soft)"><i style="width:${ta/(ta+tl)*100}%;border-radius:99px 0 0 99px"></i></div>`:''}
+    ${act.length>1?'<button class="btn sm" id="payCard" style="width:100%;margin-top:14px;background:var(--accent-soft);color:var(--accent)">⇄ Pay card / Transfer</button>':''}</div>
   <h2 class="sec">Assets <span class="num pos" style="text-transform:none">${money(ta)}</span></h2>
   <div class="card list" style="padding:2px 14px">${assets.map(row).join('')||'<div class="empty">Add your bank, savings and brokerage accounts.</div>'}</div>
   <button class="btn ghost" id="addAsset">+ Add asset</button>
   <h2 class="sec">Liabilities <span class="num neg" style="text-transform:none">${money(tl)}</span></h2>
   <div class="card list" style="padding:2px 14px">${liabs.map(row).join('')||'<div class="empty">Add your mortgage and credit cards.</div>'}</div>
   <button class="btn ghost" id="addLiab">+ Add liability</button>
-  <p class="hint" style="padding:0 4px;margin-top:12px">Tap any account to update its balance.</p>
+  <p class="hint" style="padding:0 4px;margin-top:12px">Balances update automatically when you pick an account on an expense or income. Tap an account to correct its balance, for example when the brokerage value changes.</p>
   <h2 class="sec">More</h2>
   <div class="card list" style="padding:2px 14px"><div class="it" id="openExport"><div class="ic">⤓</div><div class="mid"><div class="t">Export transactions</div><div class="s">Copy as CSV for a spreadsheet</div></div><div class="mut">›</div></div>
   ${S.mode==='local'?`<div class="it" id="backup"><div class="ic">💾</div><div class="mid"><div class="t">Back up data</div><div class="s">Save a file with everything${lastBackup()?' · last backup '+lastBackup():''}</div></div><div class="mut">›</div></div>
@@ -473,6 +510,7 @@ function renderAssets(){
   $$('[data-acct]').forEach(r=>r.onclick=()=>openAcctSheet(acctById(r.dataset.acct)));
   $('#addAsset').onclick=()=>openAcctSheet(null,false);
   $('#addLiab').onclick=()=>openAcctSheet(null,true);
+  const pc=$('#payCard');if(pc)pc.onclick=()=>openTransferSheet(null);
   $('#openExport').onclick=openExport;
 }
 function openAcctSheet(a,liab){
@@ -516,10 +554,48 @@ function doRestore(file){
   };
   r.readAsText(file);
 }
+function openTransferSheet(tx){
+  const card=accounts().find(a=>a.type==='credit');
+  const bank=accounts().find(a=>['checking','savings','mm','hysa'].includes(a.type))||accounts().find(a=>!isLiab(a));
+  const f=tx?{amount:String(tx.amount),from:tx.acct||'',to:tx.to||'',date:tx.date,note:tx.note||''}
+    :{amount:'',from:bank?.id||'',to:(card&&card.id!==bank?.id?card.id:accounts().find(a=>a.id!==bank?.id)?.id)||'',date:today(),note:''};
+  openSheet(tx?'Edit transfer':'Pay card / Transfer',`
+    <div class="amount-wrap"><span class="cur serif">$</span><input id="tAmt" inputmode="decimal" autocomplete="off" placeholder="0.00" value="${esc(f.amount)}" aria-label="Amount"></div>
+    <div class="row"><label class="field"><span>From</span>${acctSelect('tFrom',f.from)}</label><label class="field"><span>To</span>${acctSelect('tTo',f.to)}</label></div>
+    <div id="tNote" class="hint"></div>
+    <label class="field"><span>Date</span><input type="date" class="inp" id="tDate" value="${f.date}"></label>
+    <label class="field"><span>Note (optional)</span><input class="inp" id="tMemo" value="${esc(f.note)}" placeholder="e.g. October statement"></label>
+    <p class="hint">Transfers move money between your accounts. They don't count as spending, since the purchases were already entered.</p>
+    <button class="btn primary" id="tSave">${tx?'Save changes':'Record transfer'}</button>
+    ${tx?'<button class="btn danger" id="tDel" style="width:100%;margin-top:10px">Delete</button>':''}`,p=>{
+    const amt=$('#tAmt',p);
+    const preview=()=>{
+      const v=parseAmt(amt.value),from=acctById($('#tFrom',p).value),to=acctById($('#tTo',p).value);
+      if(!from||!to||from===to){$('#tNote',p).innerHTML=from&&from===to?'<span class="neg">Pick two different accounts.</span>':'';return}
+      const line=(a,assetDelta)=>{let bal=+a.balance||0;
+        if(tx){if(tx.acct===a.id)bal+=isLiab(a)?-tx.amount:tx.amount;if(tx.to===a.id)bal+=isLiab(a)?tx.amount:-tx.amount}
+        const nb=bal+(isLiab(a)?-assetDelta:assetDelta);return `${esc(a.name)}: ${money(bal)}${v>0?` → <b class="num">${money(nb)}</b>`:''}`};
+      $('#tNote',p).innerHTML=line(from,-(v>0?v:0))+'<br>'+line(to,v>0?v:0);
+    };
+    preview();amt.addEventListener('input',preview);$('#tFrom',p).onchange=preview;$('#tTo',p).onchange=preview;
+    $('#tSave',p).onclick=()=>{
+      const v=parseAmt(amt.value),from=$('#tFrom',p).value,to=$('#tTo',p).value,date=$('#tDate',p).value;
+      if(!(v>0))return toast('Enter an amount');
+      if(!from||!to||from===to)return toast('Pick two different accounts');
+      if(!date)return toast('Pick a date');
+      const t={kind:'transfer',amount:v,acct:from,to,date,note:$('#tMemo',p).value.trim()};
+      if(tx){t.id=tx.id;t.created=tx.created;updateTx(tx,t);closeSheet();toast('Saved');return}
+      const saved=addTx(t);closeSheet();
+      const b=acctById(to);toast(isLiab(b)?`Paid ${money(v)} to ${b.name}`:`Moved ${money(v)} to ${b.name}`,'Undo',()=>{removeTx(saved);render()});
+    };
+    const d=$('#tDel',p);if(d){let armed=false;d.onclick=()=>{if(!armed){armed=true;d.textContent='Tap again to delete';return}removeTx(tx);closeSheet();toast('Deleted','Undo',()=>{restoreTx(tx);render()})}}
+    if(!tx)setTimeout(()=>amt.focus(),50);
+  });
+}
 function openExport(){
   const q=s=>`"${String(s??'').replace(/"/g,'""')}"`;
-  const rows=allTx().filter(t=>t.kind==='expense'||t.kind==='income').sort((a,b)=>a.date<b.date?-1:1).map(t=>[t.date,t.kind,catById(t.cat)?.name||'',t.kind==='expense'?-t.amount:t.amount,t.note||''].map(q).join(','));
-  const csv=['date,kind,type,amount,note',...rows].join('\n');
+  const rows=allTx().filter(t=>['expense','income','transfer'].includes(t.kind)).sort((a,b)=>a.date<b.date?-1:1).map(t=>[t.date,t.kind,catById(t.cat)?.name||'',acctById(t.acct)?.name||'',acctById(t.to)?.name||'',t.kind==='expense'?-t.amount:t.amount,t.note||''].map(q).join(','));
+  const csv=['date,kind,type,account,to_account,amount,note',...rows].join('\n');
   openSheet('Export',`<p class="hint">${rows.length} entries. Paste into Excel, Google Sheets or Numbers.</p><textarea class="inp" id="csv" readonly>${esc(csv)}</textarea><button class="btn primary" id="cp">Copy CSV</button>`,p=>{
     $('#cp',p).onclick=async()=>{try{await navigator.clipboard.writeText(csv);toast('Copied')}catch(e){$('#csv',p).select();toast('Select all and copy')}};
   });
@@ -533,9 +609,17 @@ function bindMonthSwitch(onChange){
 }
 function syncSelDay(){const k=S.viewMonth;S.selDay=k===curMonth()?today():k+'-01'}
 function txRow(t){
-  const c=catById(t.cat);
-  return `<div class="it" data-tx="${t.id}"><div class="ic">${esc(c?.emo||'•')}</div><div class="mid"><div class="t">${esc(c?.name||'Uncategorized')}</div>${t.note?`<div class="s">${esc(t.note)}</div>`:''}</div><div class="amt num ${t.kind==='income'?'pos':''}">${t.kind==='income'?'+':'−'}${money(t.amount)}</div></div>`;
+  if(t.kind==='transfer'){
+    const a=acctById(t.acct),b=acctById(t.to);
+    const title=b?(isLiab(b)?`Paid ${b.name}`:`Transfer to ${b.name}`):'Transfer';
+    const sub=[a?'from '+a.name:'',t.note].filter(Boolean).join(' · ');
+    return `<div class="it" data-tx="${t.id}"><div class="ic">⇄</div><div class="mid"><div class="t">${esc(title)}</div>${sub?`<div class="s">${esc(sub)}</div>`:''}</div><div class="amt num mut">${money(t.amount)}</div></div>`;
+  }
+  const c=catById(t.cat),a=acctById(t.acct);
+  const sub=[t.note,a?a.name:''].filter(Boolean).join(' · ');
+  return `<div class="it" data-tx="${t.id}"><div class="ic">${esc(c?.emo||'•')}</div><div class="mid"><div class="t">${esc(c?.name||'Uncategorized')}</div>${sub?`<div class="s">${esc(sub)}</div>`:''}</div><div class="amt num ${t.kind==='income'?'pos':''}">${t.kind==='income'?'+':'−'}${money(t.amount)}</div></div>`;
 }
+function openTxItem(t){if(!t)return;if(t.kind==='transfer')openTransferSheet(t);else if(t.kind==='expense'||t.kind==='income')openEntrySheet({tx:t})}
 function renderTx(){
   const k=S.viewMonth,m=monthSummary(k);if(mkey(S.selDay)!==k)syncSelDay();
   const[y,mo]=k.split('-').map(Number);const first=new Date(y,mo-1,1).getDay(),dim=new Date(y,mo,0).getDate(),td=today();
@@ -545,7 +629,7 @@ function renderTx(){
     cells+=`<button class="d ${ds===td?'today':''} ${ds===S.selDay?'sel':''} ${ds>td?'future':''}" data-day="${ds}"><span class="dn">${d}</span>${v&&v.s?`<span class="ds num">${moneyTiny(v.s)}</span>`:''}${v&&v.i?`<span class="di num">+${moneyTiny(v.i)}</span>`:''}</button>`;
   }
   const net=m.income-m.spent;
-  const items=m.items.slice().sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(b.created||0)-(a.created||0));
+  const items=(S.months[k]||[]).filter(t=>t.kind==='expense'||t.kind==='income'||t.kind==='transfer').sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(b.created||0)-(a.created||0));
   const groups={};items.forEach(t=>(groups[t.date]=groups[t.date]||[]).push(t));
   const sel=m.byDay[S.selDay];
   $('#app').innerHTML=banners()+header('Transactions','')+monthSwitch()+`
@@ -559,13 +643,13 @@ function renderTx(){
     <div class="stat"><div class="k">Net</div><div class="v serif num ${net<0?'neg':''}">${net<0?'−':''}${money(Math.abs(net))}</div></div>
   </div>
   <h2 class="sec">All transactions · ${monthLabel(k).split(' ')[0]}</h2>
-  ${items.length?Object.keys(groups).map(d=>{const v=m.byDay[d];return `<div class="dayhead ${d===S.selDay?'sel':''}" id="g-${d}"><span>${dayLabel(d)}</span><span class="num">${v.s?'−'+money(v.s):''}${v.s&&v.i?'  ':''}${v.i?'+'+money(v.i):''}</span></div><div class="card list" style="padding:2px 14px;margin-bottom:4px;${d===S.selDay?'border-color:var(--accent)':''}">${groups[d].map(txRow).join('')}</div>`}).join('')
+  ${items.length?Object.keys(groups).map(d=>{const v=m.byDay[d]||{s:0,i:0};return `<div class="dayhead ${d===S.selDay?'sel':''}" id="g-${d}"><span>${dayLabel(d)}</span><span class="num">${v.s?'−'+money(v.s):''}${v.s&&v.i?'  ':''}${v.i?'+'+money(v.i):''}</span></div><div class="card list" style="padding:2px 14px;margin-bottom:4px;${d===S.selDay?'border-color:var(--accent)':''}">${groups[d].map(txRow).join('')}</div>`}).join('')
   :'<div class="card empty">No transactions this month. Pick a day above and tap + Expense.</div>'}`;
   bindMonthSwitch(syncSelDay);
   $$('[data-day]').forEach(b=>b.onclick=()=>{if(S.selDay===b.dataset.day){openEntrySheet({date:S.selDay});return}S.selDay=b.dataset.day;render()});
   $('#addExp').onclick=()=>openEntrySheet({date:S.selDay});
   $('#addInc2').onclick=()=>openEntrySheet({kind:'income',date:S.selDay});
-  $$('[data-tx]').forEach(r=>r.onclick=()=>{const t=allTx().find(x=>x.id===r.dataset.tx);t&&openEntrySheet({tx:t})});
+  $$('[data-tx]').forEach(r=>r.onclick=()=>openTxItem(allTx().find(x=>x.id===r.dataset.tx)));
 }
 
 /* ---------- BUDGET ---------- */
