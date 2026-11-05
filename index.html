@@ -179,6 +179,23 @@ textarea.inp{min-height:160px;font-family:ui-monospace,monospace;font-size:12px}
 .ab{display:flex;flex-direction:column;gap:4px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:13.5px}
 .ab div{display:flex;justify-content:space-between}
 .ab span{color:var(--muted)}
+.env{position:relative;background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:14px;box-shadow:var(--shadow);overflow:hidden;
+  background-image:linear-gradient(to top right,transparent calc(50% - .5px),var(--line) 50%,transparent calc(50% + .5px)),linear-gradient(to top left,transparent calc(50% - .5px),var(--line) 50%,transparent calc(50% + .5px));
+  background-size:50% 46px;background-position:left bottom,right bottom;background-repeat:no-repeat}
+.env .flap{position:absolute;left:-1px;right:-1px;top:-1px;height:58px;background:var(--accent-soft);clip-path:polygon(0 0,100% 0,50% 100%);pointer-events:none}
+.env .flap::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 60%,rgba(0,0,0,.06));}
+.env .seal{position:absolute;left:50%;top:44px;width:24px;height:24px;margin-left:-12px;border-radius:99px;background:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.25),inset 0 0 0 3px rgba(255,255,255,.18)}
+.env.done .seal{background:var(--pos)}
+.env .stamp{position:absolute;top:12px;right:12px;width:50px;height:58px;background:var(--card);border:2px dashed var(--line);border-radius:4px;display:grid;place-items:center;font-size:28px;transform:rotate(4deg);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.env .body{position:relative;padding:76px 16px 14px;cursor:pointer}
+.env .to{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.env .nm{font-family:Fraunces,Georgia,serif;font-size:21px;font-weight:500;line-height:1.15;margin-top:2px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-right:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.env .sub{font-size:12.5px;color:var(--muted);margin-top:6px}
+.env .amt{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px}
+.env .amt b{font-family:Fraunces,Georgia,serif;font-weight:500;font-size:26px}
+.env .bar{height:8px;margin-top:8px}
+.env .acts{display:flex;gap:8px;padding:0 16px 16px;position:relative}
+.env .acts .btn{flex:1}
 .alrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
 .alrow:first-child{border-top:0}
 .tpl{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
@@ -933,12 +950,16 @@ function renderGoals(){
   const tThis=withT.reduce((s,g)=>s+Math.max(0,goalPlan(g).thisMonth),0);
   const card=g=>{
     const p=goalPlan(g),t=hasTarget(g),pct=t?Math.min(100,g.saved/g.target*100):0;
-    return `<div class="goal ${p.done?'done':''}">
-      <div class="gh" data-g="${g.id}"><div class="ge">${esc(g.emo)}</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:16px">${esc(g.name)}</div><div class="hint" style="margin:0">${p.done?'<span class="tag ok">Goal reached 🎉</span>':t?esc(p.msg):'<span class="tag none">Envelope</span>'}</div></div>
-        ${t?'':`<b class="serif num" style="font-size:20px">${money(g.saved)}</b>`}<span class="mut">›</span></div>
-      ${t?`<div class="bar"><i style="width:${pct}%"></i></div>
-      <div class="gm num"><span><b class="serif" style="font-size:20px">${money(g.saved)}</b> <span class="mut">of ${money(g.target)}</span></span><span class="mut">${Math.round(pct)}%</span></div>`:''}
-      ${p.perMonth&&!p.done?`<div class="hint">${p.due<=0?`<span class="pos">✓ ${money(p.thisMonth)} added this month — on track</span>`:`${money(Math.max(0,p.thisMonth))} added this month · ${money(p.due)} more to stay on track`}</div>`:''}
+    return `<div class="env ${p.done?'done':''}">
+      <div class="flap"></div><div class="seal"></div><div class="stamp" aria-hidden="true">${esc(g.emo)}</div>
+      <div class="body" data-g="${g.id}">
+        <div class="to">${t?'Saving for':'Envelope'}</div>
+        <div class="nm">${esc(g.name)}</div>
+        <div class="amt num"><b>${money(g.saved)}</b>${t?`<span class="mut">of ${money(g.target)} · ${Math.round(pct)}%</span>`:''}</div>
+        ${t?`<div class="bar"><i style="width:${pct}%"></i></div>`:''}
+        ${t?`<div class="sub">${p.done?'<span class="tag ok">Goal reached 🎉</span>':esc(p.msg)}</div>`:''}
+        ${p.perMonth&&!p.done?`<div class="sub">${p.due<=0?`<span class="pos">✓ ${money(p.thisMonth)} added this month — on track</span>`:`${money(Math.max(0,p.thisMonth))} added this month · ${money(p.due)} more to stay on track`}</div>`:''}
+      </div>
       <div class="acts"><button class="btn sm" data-wd="${g.id}">− Take out</button><button class="btn sm" data-add="${g.id}" style="background:var(--accent);color:var(--on-accent)">+ Add money</button></div>
     </div>`};
   $('#app').innerHTML=banners()+header('Goals','Envelopes')+readyCardHTML()+
