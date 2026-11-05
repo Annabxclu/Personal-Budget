@@ -87,6 +87,7 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--
 .box .b{font-size:12px;color:var(--muted)}
 .box.over{border-color:var(--neg);background:linear-gradient(var(--neg-soft),var(--card) 70%)}
 .box.near{border-color:var(--warn)}
+.box.editing{border-style:dashed}
 .box .plus{position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:99px;background:var(--chip);display:grid;place-items:center;color:var(--muted);font-size:17px}
 .box.add{border:1.5px dashed var(--line);background:transparent;box-shadow:none;align-items:center;justify-content:center;color:var(--muted);font-weight:600}
 .box.add .e{font-size:28px;margin:0}
@@ -450,7 +451,7 @@ function openCatSheet(c,kind='expense'){
     <div class="field"><span>Icon</span><div class="emo-pick">${EMOJIS.map(e=>`<button type="button" class="${e===c.emo?'on':''}" data-e="${e}">${e}</button>`).join('')}</div></div>
     ${c.kind==='expense'?`<label class="field"><span>Monthly budget</span><input class="inp num" id="cBud" inputmode="decimal" value="${c.budget||''}" placeholder="No limit"></label>`:''}
     <button class="btn primary" id="cSave">${isNew?'Add':'Save'}</button>
-    ${!isNew?`<button class="btn danger" id="cDel" style="width:100%;margin-top:10px">Remove type</button><p class="hint">${used?'Past entries keep this type; it just won\'t show for new ones.':''}</p>`:''}`,p=>{
+    ${!isNew?`<button class="btn danger" id="cDel" style="width:100%;margin-top:10px">Delete type</button><p class="hint">${used?'You have entries in this type. They will keep it in your history, but it will not appear as a box or in budgets.':''}</p>`:''}`,p=>{
     $$('[data-e]',p).forEach(b=>b.onclick=()=>{c.emo=b.dataset.e;$$('[data-e]',p).forEach(x=>x.classList.toggle('on',x===b))});
     $('#cSave',p).onclick=()=>{
       c.name=$('#cName',p).value.trim();if(!c.name)return toast('Give it a name');
@@ -458,9 +459,9 @@ function openCatSheet(c,kind='expense'){
       if(isNew)S.settings.categories.push(c);else S.settings.categories=S.settings.categories.map(x=>x.id===c.id?c:x);
       saveSettings();closeSheet();toast(isNew?`${c.name} added`:'Saved');
     };
-    const d=$('#cDel',p);if(d){let armed=false;d.onclick=()=>{if(!armed){armed=true;d.textContent='Tap again to remove';return}
+    const d=$('#cDel',p);if(d){let armed=false;d.onclick=()=>{if(!armed){armed=true;d.textContent='Tap again to delete';return}
       if(used)S.settings.categories=S.settings.categories.map(x=>x.id===c.id?{...x,hidden:true}:x);else S.settings.categories=S.settings.categories.filter(x=>x.id!==c.id);
-      saveSettings();closeSheet();toast('Removed')}}
+      saveSettings();closeSheet();toast('Deleted')}}
     if(isNew)setTimeout(()=>$('#cName',p).focus(),50);
   });
 }
@@ -470,8 +471,8 @@ function renderHome(){
   const k=curMonth(),m=monthSummary(k),tb=totalBudget();
   const boxes=cats('expense').map(c=>{
     const sp=m.byCat[c.id]||0,b=+c.budget||0,st=status(sp,b),pct=b?Math.min(100,sp/b*100):0;
-    return `<button class="box ${st==='over'?'over':st==='near'?'near':''}" data-cat="${c.id}">
-      <span class="plus">+</span><span class="e">${esc(c.emo)}</span><span class="n">${esc(c.name)}</span>
+    return `<button class="box ${st==='over'?'over':st==='near'?'near':''} ${S.editHome?'editing':''}" data-cat="${c.id}">
+      <span class="plus">${S.editHome?'✎':'+'}</span><span class="e">${esc(c.emo)}</span><span class="n">${esc(c.name)}</span>
       <span class="v serif num">${money(sp)}</span>
       <span class="b num">${b?(st==='over'?`<span class="neg">${money(sp-b)} over</span>`:`${money(b-sp)} left of ${money(b)}`):'No budget set'}</span>
       ${b?`<div class="bar"><i class="${st==='over'?'over':st==='near'?'near':''}" style="width:${pct}%"></i></div>`:''}
@@ -483,11 +484,12 @@ function renderHome(){
     ${tb?`<div class="bar"><i class="${status(m.spent,tb)==='over'?'over':status(m.spent,tb)==='near'?'near':''}" style="width:${Math.min(100,m.spent/tb*100)}%"></i></div>
     <p class="hint">${m.spent>tb?`${money(m.spent-tb)} over your total budget`:`${money(tb-m.spent)} left to spend`}</p>`:''}
   </div>
-  <h2 class="sec">Tap a box to add an expense <button class="link" id="addInc">+ Income</button></h2>
+  <h2 class="sec">${S.editHome?'Tap a box to rename or delete':'Tap a box to add an expense'} <span>${S.editHome?'':'<button class="link" id="addInc">+ Income</button> · '}<button class="link" id="editHome">${S.editHome?'Done':'Edit'}</button></span></h2>
   <div class="boxes">${boxes}<button class="box add" id="addCat"><span class="e">＋</span>Add type</button></div>`;
-  $$('[data-cat]').forEach(b=>b.onclick=()=>openEntrySheet({cat:b.dataset.cat}));
+  $$('[data-cat]').forEach(b=>b.onclick=()=>S.editHome?openCatSheet(catById(b.dataset.cat)):openEntrySheet({cat:b.dataset.cat}));
   $('#addCat').onclick=()=>openCatSheet(null,'expense');
-  $('#addInc').onclick=()=>openEntrySheet({kind:'income'});
+  const ai=$('#addInc');if(ai)ai.onclick=()=>openEntrySheet({kind:'income'});
+  $('#editHome').onclick=()=>{S.editHome=!S.editHome;render()};
 }
 
 /* ---------- NET ASSETS ---------- */
@@ -683,7 +685,7 @@ function renderBudget(){
   const rows=list.map(c=>{
     const sp=m.byCat[c.id]||0,b=+c.budget||0,st=status(sp,b);if(st in counts)counts[st]++;
     return `<div class="brow" data-c="${c.id}"><div class="top">
-      <div class="nm" data-edit="${c.id}"><span style="font-size:20px">${esc(c.emo)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></div>
+      <div class="nm" data-edit="${c.id}"><span style="font-size:20px">${esc(c.emo)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="mut" style="font-size:13px">✎</span></div>
       <input class="inp num bin" inputmode="decimal" data-bud="${c.id}" value="${b||''}" placeholder="Set budget" aria-label="${esc(c.name)} monthly budget"></div>
       ${b?`<div class="bar"><i class="${st==='over'?'over':st==='near'?'near':''}" style="width:${Math.min(100,sp/b*100)}%"></i></div>`:''}
       <div class="meta num"><span>${money(sp)} spent${b?` · ${st==='over'?money(sp-b)+' over':money(b-sp)+' left'}`:''}</span><span class="tag ${st}">${statusText[st]}</span></div>
@@ -697,7 +699,7 @@ function renderBudget(){
   </div>
   <div class="card" style="padding:4px 14px">${rows}</div>
   <button class="btn ghost" id="addCat2">+ Add expense type</button>
-  <p class="hint" style="padding:0 4px">"Near budget" means 80% or more is used. Budgets apply to every month. Tap a name to rename, change its icon or remove it.</p>
+  <p class="hint" style="padding:0 4px">"Near budget" means 80% or more is used. Budgets apply to every month. Tap ✎ to rename, change the icon or delete a type.</p>
   <h2 class="sec">Income types</h2>
   <div class="card list" style="padding:2px 14px">${cats('income').map(c=>`<div class="it" data-edit="${c.id}"><div class="ic">${esc(c.emo)}</div><div class="mid"><div class="t">${esc(c.name)}</div></div><div class="mut">›</div></div>`).join('')}</div>
   <button class="btn ghost" id="addIncCat">+ Add income type</button>`;
