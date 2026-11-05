@@ -18,12 +18,12 @@
 :root{
   --bg:#f5f2ec; --card:#fffdf9; --ink:#1e1d1a; --muted:#77736b; --line:#e6e1d7;
   --accent:#1f6f54; --accent-soft:#e1efe8; --neg:#b2472b; --neg-soft:#f6e3dc; --warn:#b7801c; --warn-soft:#f6ecd7;
-  --chip:#efebe3; --pos:#1f7a52; --on-accent:#fff; --shadow:0 1px 2px rgba(30,29,26,.06),0 4px 16px rgba(30,29,26,.05);
+  --chip:#efebe3; --pos:#1f7a52; --c-inc:#1f7a52; --c-exp:#b2472b; --on-accent:#fff; --shadow:0 1px 2px rgba(30,29,26,.06),0 4px 16px rgba(30,29,26,.05);
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#151513; --card:#1e1e1b; --ink:#efece6; --muted:#9a968d; --line:#2e2d29;
   --accent:#5dbb93; --accent-soft:#1f3329; --neg:#e7866a; --neg-soft:#3a2520; --warn:#e0b25a; --warn-soft:#3a3020;
-  --chip:#2a2926; --pos:#5dbb93; --on-accent:#fff; --shadow:none;
+  --chip:#2a2926; --pos:#5dbb93; --c-inc:#3fa57a; --c-exp:#d9714d; --on-accent:#fff; --shadow:none;
 }}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Instrument Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
@@ -159,6 +159,23 @@ textarea.inp{min-height:160px;font-family:ui-monospace,monospace;font-size:12px}
 .sw.on{border-color:var(--ink)}
 .sw input[type=color]{width:34px;height:34px;border:0;padding:0;background:none;border-radius:99px;cursor:pointer}
 .iconbtn{border:1px solid var(--line);background:var(--card);border-radius:99px;width:36px;height:36px;font-size:17px;cursor:pointer;display:grid;place-items:center}
+.yr svg{display:block;width:100%;height:auto;overflow:visible}
+.yr .lg{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin:2px 0 8px}
+.yr .lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.yr .readout{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);margin-top:8px;padding-top:10px;font-size:13px}
+.yr .readout .rv{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.yr .readout .rv span{display:block;color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.yr .readout b{font-size:14px}
+.yr .hit{cursor:pointer}
+.sw2{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:0}
+.yr details{margin-top:10px;font-size:13px}
+.yr summary{color:var(--muted);cursor:pointer;font-weight:600}
+.yr table{width:100%;border-collapse:collapse;margin-top:8px;font-variant-numeric:tabular-nums}
+.yr td,.yr th{padding:5px 2px;text-align:right;border-top:1px solid var(--line)}
+.yr th{font-weight:600;color:var(--muted);font-size:11.5px;border-top:0}
+.yr td:first-child,.yr th:first-child{text-align:left}
+.ysum{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 12px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.ysum b{display:block;color:var(--ink);font-size:13.5px;text-transform:none;letter-spacing:0;margin-top:1px}
 .tpl{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .tpl button{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:12px;text-align:left;cursor:pointer;display:flex;gap:10px;align-items:center;font-weight:500}
 .tpl button span{font-size:22px}
@@ -225,8 +242,8 @@ function applyAppearance(a){
     const p=palette(hex,dark);keys.forEach(k=>root.setProperty('--'+k,p[k]));
   }
   // semantic colors follow light/dark
-  const sem=dark?{neg:'#e7866a','neg-soft':'#3a2520',warn:'#e0b25a','warn-soft':'#3a3020',pos:'#5dbb93',shadow:'none'}
-    :{neg:'#b2472b','neg-soft':'#f6e3dc',warn:'#b7801c','warn-soft':'#f6ecd7',pos:'#1f7a52',shadow:'0 1px 2px rgba(30,29,26,.06),0 4px 16px rgba(30,29,26,.05)'};
+  const sem=dark?{neg:'#e7866a','neg-soft':'#3a2520',warn:'#e0b25a','warn-soft':'#3a3020',pos:'#5dbb93','c-inc':'#3fa57a','c-exp':'#d9714d',shadow:'none'}
+    :{neg:'#b2472b','neg-soft':'#f6e3dc',warn:'#b7801c','warn-soft':'#f6ecd7',pos:'#1f7a52','c-inc':'#1f7a52','c-exp':'#b2472b',shadow:'0 1px 2px rgba(30,29,26,.06),0 4px 16px rgba(30,29,26,.05)'};
   if(a.mode==='auto'&&a.theme==='green')Object.keys(sem).forEach(k=>root.removeProperty('--'+k));else Object.entries(sem).forEach(([k,v])=>root.setProperty('--'+k,v));
   document.documentElement.style.colorScheme=dark?'dark':'light';
   const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()||'#f5f2ec');
@@ -742,14 +759,67 @@ function renderTx(){
     <div class="stat"><div class="k">Expenses</div><div class="v serif num neg">${money(m.spent)}</div></div>
     <div class="stat"><div class="k">Net</div><div class="v serif num ${net<0?'neg':''}">${net<0?'−':''}${money(Math.abs(net))}</div></div>
   </div>
+  ${yearChartHTML()}
   <h2 class="sec">All transactions · ${monthLabel(k).split(' ')[0]}</h2>
   ${items.length?Object.keys(groups).map(d=>{const v=m.byDay[d]||{s:0,i:0};return `<div class="dayhead ${d===S.selDay?'sel':''}" id="g-${d}"><span>${dayLabel(d)}</span><span class="num">${v.s?'−'+money(v.s):''}${v.s&&v.i?'  ':''}${v.i?'+'+money(v.i):''}</span></div><div class="card list" style="padding:2px 14px;margin-bottom:4px;${d===S.selDay?'border-color:var(--accent)':''}">${groups[d].map(txRow).join('')}</div>`}).join('')
   :'<div class="card empty">No transactions this month. Pick a day above and tap + Expense.</div>'}`;
   bindMonthSwitch(syncSelDay);
+  bindYearChart();
   $$('[data-day]').forEach(b=>b.onclick=()=>{if(S.selDay===b.dataset.day){openEntrySheet({date:S.selDay});return}S.selDay=b.dataset.day;render()});
   $('#addExp').onclick=()=>openEntrySheet({date:S.selDay});
   $('#addInc2').onclick=()=>openEntrySheet({kind:'income',date:S.selDay});
   $$('[data-tx]').forEach(r=>r.onclick=()=>openTxItem(allTx().find(x=>x.id===r.dataset.tx)));
+}
+
+/* ---------- 12-month chart ---------- */
+let yrSel=null;
+function yearData(){
+  const end=curMonth();
+  return [...Array(12)].map((_,i)=>{const k=shiftMonth(end,i-11),m=monthSummary(k);return {k,inc:m.income,exp:m.spent}});
+}
+function niceMax(v){if(v<=0)return 100;const p=Math.pow(10,Math.floor(Math.log10(v)));const n=v/p;return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p}
+function topBar(x,y,w,h,r){if(h<=0)return '';r=Math.min(r,h,w/2);return `M${x},${y+h}V${y+r}Q${x},${y} ${x+r},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h}Z`}
+function yearChartHTML(){
+  const d=yearData();
+  if(!yrSel||!d.some(x=>x.k===yrSel))yrSel=d.some(x=>x.k===S.viewMonth)?S.viewMonth:d[11].k;
+  const W=340,H=170,L=36,T=10,B=22,pw=W-L-4,ph=H-T-B,slot=pw/12,bw=Math.min(10,slot*0.36),gap=2;
+  const mx=niceMax(Math.max(1,...d.map(x=>Math.max(x.inc,x.exp))));
+  const y=v=>T+ph-(v/mx)*ph;
+  let g='';
+  [0,.5,1].forEach(f=>{const yy=y(mx*f);g+=`<line x1="${L}" x2="${W-4}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-width="1"/><text x="${L-6}" y="${yy+3.5}" text-anchor="end" font-size="10" fill="var(--muted)">${moneyTiny(mx*f)}</text>`});
+  let bars='';
+  d.forEach((x,i)=>{
+    const cx=L+slot*i+slot/2,sel=x.k===yrSel;
+    if(sel)bars+=`<rect x="${L+slot*i+1}" y="${T-4}" width="${slot-2}" height="${ph+4}" rx="6" fill="var(--chip)"/>`;
+    const hi=ph*(x.inc/mx),he=ph*(x.exp/mx);
+    bars+=`<path d="${topBar(cx-bw-gap/2,y(x.inc),bw,hi,4)}" fill="var(--c-inc)"/>`;
+    bars+=`<path d="${topBar(cx+gap/2,y(x.exp),bw,he,4)}" fill="var(--c-exp)"/><path d="${topBar(cx+gap/2,y(x.exp),bw,he,4)}" fill="url(#hatch)"/>`;
+    const[yy,mm]=x.k.split('-').map(Number);const lbl=new Date(yy,mm-1,1).toLocaleDateString('en-US',{month:'short'});
+    bars+=`<text x="${cx}" y="${H-6}" text-anchor="middle" font-size="10" font-weight="${sel?700:400}" fill="${sel?'var(--ink)':'var(--muted)'}">${mm===1?"'"+String(yy).slice(2):lbl}</text>`;
+    bars+=`<rect class="hit" data-ym="${x.k}" x="${L+slot*i}" y="0" width="${slot}" height="${H}" fill="transparent"><title>${monthLabel(x.k)}: income ${money(x.inc)}, expenses ${money(x.exp)}</title></rect>`;
+  });
+  const base=`<line x1="${L}" x2="${W-4}" y1="${T+ph}" y2="${T+ph}" stroke="var(--muted)" stroke-width="1" opacity=".5"/>`;
+  const s=d.find(x=>x.k===yrSel),net=s.inc-s.exp;
+  const ti=d.reduce((a,x)=>a+x.inc,0),te=d.reduce((a,x)=>a+x.exp,0),active=d.filter(x=>x.inc||x.exp).length||1;
+  return `<h2 class="sec">Last 12 months</h2><div class="card yr">
+    <div class="lg"><span><i style="background:var(--c-inc)"></i>Income</span><span><i style="background:var(--c-exp);background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 1.5px,transparent 1.5px 4px)"></i>Expenses</span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Income and expenses by month for the last 12 months">
+      <defs><pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.4" height="4" fill="rgba(255,255,255,.35)"/></pattern></defs>
+      ${g}${bars}${base}
+    </svg>
+    <div style="font-weight:600;font-size:13.5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">${monthLabel(s.k)}</div><div class="readout" style="border-top:0;margin-top:2px;padding-top:4px"><div class="rv num"><div><span><i class="sw2" style="background:var(--c-inc)"></i>Income</span><b>${money(s.inc)}</b></div><div><span><i class="sw2" style="background:var(--c-exp)"></i>Expenses</span><b>${money(s.exp)}</b></div><div><span>Net</span><b class="${net<0?'neg':''}">${net<0?'−':''}${money(Math.abs(net))}</b></div></div>
+      ${s.k!==S.viewMonth?`<button class="btn sm" id="yrOpen">Open ›</button>`:''}</div>
+    <div class="ysum num"><div>Income, 12 months<b>${money(ti)}</b></div><div>Spent, 12 months<b>${money(te)}</b></div><div>Net, 12 months<b class="${ti-te<0?'neg':''}">${ti-te<0?'−':''}${money(Math.abs(ti-te))}</b></div><div>Avg spent / month<b>${money(te/active)}</b></div></div>
+    <details><summary>Show as table</summary><table><tr><th>Month</th><th>Income</th><th>Expenses</th><th>Net</th></tr>
+      ${d.slice().reverse().map(x=>`<tr><td>${monthLabel(x.k)}</td><td>${money(x.inc)}</td><td>${money(x.exp)}</td><td class="${x.inc-x.exp<0?'neg':''}">${x.inc-x.exp<0?'−':''}${money(Math.abs(x.inc-x.exp))}</td></tr>`).join('')}</table></details>
+  </div>`;
+}
+function bindYearChart(){
+  $$('.yr .hit').forEach(r=>{
+    const pick=()=>{yrSel=r.dataset.ym;const el=$('.yr');const open=el&&el.querySelector('details')?.open;const y=window.scrollY;render();if(open)$('.yr details').open=true;window.scrollTo(0,y)};
+    r.addEventListener('click',pick);r.addEventListener('mouseenter',()=>{if(matchMedia('(hover:hover)').matches&&yrSel!==r.dataset.ym)pick()});
+  });
+  const o=$('#yrOpen');if(o)o.onclick=()=>{S.viewMonth=yrSel;syncSelDay();render();window.scrollTo(0,0)};
 }
 
 /* ---------- BUDGET ---------- */
