@@ -88,7 +88,10 @@ h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--
 .box.over{border-color:var(--neg);background:linear-gradient(var(--neg-soft),var(--card) 70%)}
 .box.near{border-color:var(--warn)}
 .box.editing{border-style:dashed}
-.box .plus{position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:99px;background:var(--chip);display:grid;place-items:center;color:var(--muted);font-size:17px}
+.box .plus{position:absolute;top:8px;right:8px;width:32px;height:32px;border-radius:99px;background:var(--accent);display:grid;place-items:center;color:var(--on-accent);font-size:20px;font-weight:500}
+.box.editing .plus{background:var(--chip);color:var(--muted)}
+.box .plus::before{content:'';position:absolute;inset:-8px}
+.cd-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 .box.add{border:1.5px dashed var(--line);background:transparent;box-shadow:none;align-items:center;justify-content:center;color:var(--muted);font-weight:600}
 .box.add .e{font-size:28px;margin:0}
 .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;letter-spacing:.02em}
@@ -601,7 +604,7 @@ function renderHome(){
   const boxes=cats('expense').map(c=>{
     const sp=m.byCat[c.id]||0,b=budgetFor(c,k),st=status(sp,b),pct=b?Math.min(100,sp/b*100):0;
     return `<button class="box ${st==='over'?'over':st==='near'?'near':''} ${S.editHome?'editing':''}" data-cat="${c.id}">
-      <span class="plus">${S.editHome?'✎':'+'}</span><span class="e">${esc(c.emo)}</span><span class="n">${esc(c.name)}</span>
+      <span class="plus" data-quick="1" aria-label="Add ${esc(c.name)} expense">${S.editHome?'✎':'+'}</span><span class="e">${esc(c.emo)}</span><span class="n">${esc(c.name)}</span>
       <span class="v serif num">${money(sp)}</span>
       <span class="b num">${b?(st==='over'?`<span class="neg">${money(sp-b)} over</span>`:`${money(b-sp)} left of ${money(b)}`):'No budget set'}</span>
       ${b?`<div class="bar"><i class="${st==='over'?'over':st==='near'?'near':''}" style="width:${pct}%"></i></div>`:''}
@@ -614,14 +617,46 @@ function renderHome(){
     <p class="hint">${m.spent>tb?`${money(m.spent-tb)} over your total budget`:`${money(tb-m.spent)} left to spend`}</p>`:''}
   </div>
   ${(()=>{const A=allocation();return A.hasCash&&A.ready>=1?`<div class="card" id="readyNudge" style="padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;border-color:var(--accent)"><span style="font-size:22px">💰</span><div style="flex:1"><b class="num">${money(A.ready)}</b> ready to allocate<div class="hint" style="margin:0">Give it a job in your envelopes</div></div><span class="mut">›</span></div>`:A.hasCash&&A.ready<=-1?`<div class="card" id="readyNudge" style="padding:12px 16px;cursor:pointer;border-color:var(--neg)"><span class="neg">Envelopes are ${money(-A.ready)} more than your cash</span> ›</div>`:''})()}
-  <h2 class="sec">${S.editHome?'Tap a box to rename or delete':'Tap a box to add an expense'} <span>${S.editHome?'':'<button class="link" id="addInc">+ Income</button> · '}<button class="link" id="editHome">${S.editHome?'Done':'Edit'}</button></span></h2>
+  <h2 class="sec">${S.editHome?'Tap a box to rename or delete':'Tap a box to see it · + to add'} <span>${S.editHome?'':'<button class="link" id="addInc">+ Income</button> · '}<button class="link" id="editHome">${S.editHome?'Done':'Edit'}</button></span></h2>
   <div class="boxes">${boxes}<button class="box add" id="addCat"><span class="e">＋</span>Add type</button></div>`;
-  $$('[data-cat]').forEach(b=>b.onclick=()=>S.editHome?openCatSheet(catById(b.dataset.cat)):openEntrySheet({cat:b.dataset.cat}));
+  $$('[data-cat]').forEach(b=>b.onclick=e=>{
+    if(S.editHome)return openCatSheet(catById(b.dataset.cat));
+    if(e.target.closest('[data-quick]'))return openEntrySheet({cat:b.dataset.cat});
+    openCatDetail(b.dataset.cat,curMonth());
+  });
   $('#addCat').onclick=()=>openCatSheet(null,'expense');
   $('#openLook').onclick=openAppearance;
   const rn=$('#readyNudge');if(rn)rn.onclick=()=>setTab('goals');
   const ai=$('#addInc');if(ai)ai.onclick=()=>openEntrySheet({kind:'income'});
   $('#editHome').onclick=()=>{S.editHome=!S.editHome;render()};
+}
+
+/* ---------- category detail ---------- */
+function openCatDetail(id,k){
+  const c=catById(id);if(!c)return;
+  const items=(S.months[k]||[]).filter(t=>t.kind===c.kind&&t.cat===id).sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(b.created||0)-(a.created||0));
+  const total=items.reduce((s,t)=>s+t.amount,0);
+  const b=c.kind==='expense'?budgetFor(c,k):0,st=status(total,b);
+  const pk=shiftMonth(k,-1),prev=(S.months[pk]||[]).filter(t=>t.kind===c.kind&&t.cat===id).reduce((s,t)=>s+t.amount,0);
+  const groups={};items.forEach(t=>(groups[t.date]=groups[t.date]||[]).push(t));
+  const isCur=k===curMonth();
+  openSheet(`${esc(c.emo)} ${esc(c.name)}`,`
+    <div class="mswitch" style="margin:6px 0 10px"><button id="cdPrev" aria-label="Previous month">‹</button><span class="m serif" style="font-size:18px">${monthLabel(k)}</span><button id="cdNext" aria-label="Next month" ${isCur?'disabled style="opacity:.3"':''}>›</button></div>
+    <div class="card" style="background:var(--bg);margin-bottom:8px">
+      <div class="cd-head"><div><p class="label" style="margin:0 0 2px">${c.kind==='income'?'Received':'Spent'}</p><div class="serif num big">${money(total)}</div></div>
+        ${b?`<span class="tag ${st}">${statusText[st]}</span>`:''}</div>
+      ${b?`<div class="bar"><i class="${st==='over'?'over':st==='near'?'near':''}" style="width:${Math.min(100,total/b*100)}%"></i></div>
+        <p class="hint num">${st==='over'?`<span class="neg">${money(total-b)} over</span> a ${money(b)} budget`:`${money(b-total)} left of ${money(b)}`}</p>`:''}
+      <p class="hint num" style="margin-top:${b?2:8}px">${monthLabel(pk).split(' ')[0]}: ${money(prev)} · ${items.length} ${items.length===1?'entry':'entries'} this month</p>
+    </div>
+    ${items.length?Object.keys(groups).map(d=>`<div class="dayhead"><span>${dayLabel(d)}</span><span class="num">${money(groups[d].reduce((s,t)=>s+t.amount,0))}</span></div><div class="list">${groups[d].map(t=>txRow(t,true)).join('')}</div>`).join('')
+      :`<div class="empty">No ${esc(c.name)} ${c.kind==='income'?'income':'expenses'} in ${monthLabel(k).split(' ')[0]}.</div>`}
+    <button class="btn primary" id="cdAdd">+ Add ${esc(c.name)} ${c.kind==='income'?'income':'expense'}</button>`,p=>{
+    $('#cdPrev',p).onclick=()=>openCatDetail(id,shiftMonth(k,-1));
+    $('#cdNext',p).onclick=()=>{if(!isCur)openCatDetail(id,shiftMonth(k,1))};
+    $('#cdAdd',p).onclick=()=>openEntrySheet(c.kind==='income'?{kind:'income',cat:id}:{cat:id,date:isCur?today():k+'-01'});
+    $$('[data-tx]',p).forEach(r=>r.onclick=()=>openTxItem(allTx().find(x=>x.id===r.dataset.tx)));
+  });
 }
 
 /* ---------- NET ASSETS ---------- */
@@ -787,7 +822,7 @@ function bindMonthSwitch(onChange){
   $('#mNext').onclick=()=>{S.viewMonth=shiftMonth(S.viewMonth,1);onChange&&onChange();render()};
 }
 function syncSelDay(){const k=S.viewMonth;S.selDay=k===curMonth()?today():k+'-01'}
-function txRow(t){
+function txRow(t,inCat){
   if(t.kind==='transfer'){
     const a=acctById(t.acct),b=acctById(t.to);
     const title=b?(isLiab(b)?`Paid ${b.name}`:`Transfer to ${b.name}`):'Transfer';
@@ -795,7 +830,8 @@ function txRow(t){
     return `<div class="it" data-tx="${t.id}"><div class="ic">⇄</div><div class="mid"><div class="t">${esc(title)}</div>${sub?`<div class="s">${esc(sub)}</div>`:''}</div><div class="amt num mut">${money(t.amount)}</div></div>`;
   }
   const c=catById(t.cat),a=acctById(t.acct);
-  const ev=t.env?goalById(t.env):null;const sub=[t.note,a?a.name:'',ev?'✉ '+ev.name:''].filter(Boolean).join(' · ');
+  const ev=t.env?goalById(t.env):null;const sub=[inCat?'':t.note,a?a.name:'',ev?'✉ '+ev.name:''].filter(Boolean).join(' · ');
+  if(inCat)return `<div class="it" data-tx="${t.id}"><div class="ic">${esc(c?.emo||'•')}</div><div class="mid"><div class="t">${esc(t.note||c?.name||'')}</div>${sub?`<div class="s">${esc(sub)}</div>`:''}</div><div class="amt num ${t.kind==='income'?'pos':''}">${t.kind==='income'?'+':'−'}${money(t.amount)}</div></div>`;
   return `<div class="it" data-tx="${t.id}"><div class="ic">${esc(c?.emo||'•')}</div><div class="mid"><div class="t">${esc(c?.name||'Uncategorized')}</div>${sub?`<div class="s">${esc(sub)}</div>`:''}</div><div class="amt num ${t.kind==='income'?'pos':''}">${t.kind==='income'?'+':'−'}${money(t.amount)}</div></div>`;
 }
 function openTxItem(t){if(!t)return;if(t.kind==='transfer')openTransferSheet(t);else if(t.kind==='expense'||t.kind==='income')openEntrySheet({tx:t})}
