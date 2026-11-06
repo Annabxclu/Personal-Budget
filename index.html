@@ -399,13 +399,27 @@ function acctDelta(id,assetDelta){
   const a=(S.settings?.accounts||[]).find(x=>x.id===id);if(!a||!assetDelta)return false;
   a.balance=Math.round(((+a.balance||0)+(isLiab(a)?-assetDelta:assetDelta))*100)/100;a.updated=today();return true;
 }
+// An expense can come out of an envelope and income can go into one; the envelope's history gets a linked entry.
+function envEffect(t,sign){
+  if(!t.env||!(t.kind==='expense'||t.kind==='income'))return false;
+  const g=(S.settings.goals||[]).find(x=>x.id===t.env);if(!g)return false;
+  const amt=t.kind==='income'?t.amount:-t.amount;
+  g.saved=Math.round(((+g.saved||0)+amt*sign)*100)/100;
+  g.log=(g.log||[]).filter(l=>l.tx!==t.id);
+  if(sign>0){const c=(S.settings.categories||[]).find(x=>x.id===t.cat);g.log.push({d:t.date,amt,note:[c?c.name:'',t.note].filter(Boolean).join(' · '),tx:t.id})}
+  return true;
+}
 function applyEffect(t,sign){
   if(!t||!S.settings)return false;
-  if(t.kind==='expense')return acctDelta(t.acct,-t.amount*sign);
-  if(t.kind==='income')return acctDelta(t.acct,t.amount*sign);
-  if(t.kind==='transfer'){const a=acctDelta(t.acct,-t.amount*sign),b=acctDelta(t.to,t.amount*sign);return a||b}
-  return false;
+  let r=false;
+  if(t.kind==='expense')r=acctDelta(t.acct,-t.amount*sign);
+  else if(t.kind==='income')r=acctDelta(t.acct,t.amount*sign);
+  else if(t.kind==='transfer'){const a=acctDelta(t.acct,-t.amount*sign),b=acctDelta(t.to,t.amount*sign);r=a||b}
+  const e=envEffect(t,sign);
+  return r||e;
 }
+function envForCat(cat){try{const m=JSON.parse(localStorage.getItem('ledger_envForCat')||'{}');const v=m[cat];return v&&goals().some(g=>g.id===v&&!g.archived)?v:''}catch(e){return ''}}
+function rememberEnv(cat,env){try{const m=JSON.parse(localStorage.getItem('ledger_envForCat')||'{}');m[cat]=env||'';localStorage.setItem('ledger_envForCat',JSON.stringify(m))}catch(e){}}
 function addTx(t){t.id=genId();t.created=Date.now();const k=mkey(t.date);(S.months[k]=S.months[k]||[]).push(t);saveMonth(k);if(applyEffect(t,1))saveSettings();return t}
 function removeTx(t){const k=mkey(t.date);S.months[k]=(S.months[k]||[]).filter(x=>x.id!==t.id);saveMonth(k);if(applyEffect(t,-1))saveSettings()}
 function restoreTx(t){const k=mkey(t.date);(S.months[k]=S.months[k]||[]).push(t);saveMonth(k);if(applyEffect(t,1))saveSettings()}
@@ -479,7 +493,8 @@ $('#sheet').addEventListener('click',e=>{if(e.target.id==='sheet')closeSheet()})
 
 /* ---------- entry sheet (add / edit transaction) ---------- */
 function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
-  const f=tx?{kind:tx.kind==='income'?'income':'expense',amount:String(tx.amount),date:tx.date,cat:tx.cat||null,note:tx.note||'',acct:tx.acct||''}:{kind,amount:'',date,cat,note:'',acct:lastAcct(kind)};
+  const f=tx?{kind:tx.kind==='income'?'income':'expense',amount:String(tx.amount),date:tx.date,cat:tx.cat||null,note:tx.note||'',acct:tx.acct||'',env:tx.env||''}:{kind,amount:'',date,cat,note:'',acct:lastAcct(kind),env:cat?envForCat(cat):''};
+  let envTouched=!!tx;
   const fixedCat=!tx&&cat;
   const draw=p=>{
     const c=catById(f.cat);
@@ -491,6 +506,8 @@ function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
       ${fixedCat?'':`<div class="cats">${list.map(x=>`<button type="button" class="cat ${x.id===f.cat?'on':''}" data-cat="${x.id}"><span class="e">${esc(x.emo)}</span><span class="n">${esc(x.name)}</span></button>`).join('')}</div>`}
       ${accounts().length?`<label class="field"><span>${f.kind==='income'?'Deposited to':'Paid with'}</span>${acctSelect('fAcct',f.acct,"Don't update an account")}</label><div id="acctNote" class="hint"></div>`
         :'<p class="hint">Tip: add your accounts on Net Assets and their balances will update as you enter expenses.</p>'}
+      ${(()=>{const gs=goals().filter(g=>!g.archived);const cur=goalById(f.env);if(cur&&!gs.includes(cur))gs.push(cur);if(!gs.length)return '';
+        return `<label class="field"><span>${f.kind==='income'?'Add to envelope':'Take from envelope'}</span><select class="inp" id="fEnv"><option value="">${f.kind==='income'?'None — goes to Ready to allocate':'None'}</option>${gs.map(g=>`<option value="${g.id}" ${g.id===f.env?'selected':''}>${esc(g.emo)} ${esc(g.name)}</option>`).join('')}</select></label><div id="envNote" class="hint"></div>`})()}
       <label class="field"><span>Date</span><input type="date" class="inp" id="fDate" value="${f.date}"></label>
       <label class="field"><span>Note (optional)</span><input class="inp" id="fNote" value="${esc(f.note)}" placeholder="e.g. Costco run"></label>
       <button type="button" class="btn primary" id="fSave">${tx?'Save changes':'Add '+f.kind}</button>
@@ -510,14 +527,22 @@ function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
       const v=parseAmt(amtEl.value),d=v>0?(f.kind==='income'?v:-v):0,nb=bal+(isLiab(a)?-d:d);
       el.innerHTML=`${esc(a.name)} ${isLiab(a)?'owed':'balance'}: ${money(bal)}${v>0?` → <b class="num">${money(nb)}</b>`:''}`;
     };
-    note();acctNote();
+    const envNote=()=>{
+      const el=$('#envNote',p);if(!el)return;const g=goalById(f.env);if(!g){el.innerHTML='';return}
+      let bal=+g.saved||0;if(tx&&tx.env===g.id)bal-=tx.kind==='income'?tx.amount:-tx.amount;
+      const v=parseAmt(amtEl.value),nb=bal+(v>0?(f.kind==='income'?v:-v):0);
+      el.innerHTML=`${esc(g.name)} envelope: ${money(bal)}${v>0?` → <b class="num ${nb<0?'neg':''}">${nb<0?'−':''}${money(Math.abs(nb))}</b>`:''}${v>0&&nb<0?' <span class="neg">(more than it holds)</span>':''}`;
+    };
+    note();acctNote();envNote();
     const fa=$('#fAcct',p);if(fa)fa.onchange=()=>{f.acct=fa.value;acctNote()};
-    amtEl.addEventListener('input',()=>{f.amount=amtEl.value;note();acctNote()});
+    const fe=$('#fEnv',p);if(fe)fe.onchange=()=>{f.env=fe.value;envTouched=true;envNote()};
+    amtEl.addEventListener('input',()=>{f.amount=amtEl.value;note();acctNote();envNote()});
     amtEl.addEventListener('keydown',e=>{if(e.key==='Enter')$('#fSave',p).click()});
     $('#fDate',p).addEventListener('input',e=>{f.date=e.target.value;note()});
     $('#fNote',p).addEventListener('input',e=>f.note=e.target.value);
-    $$('[data-kind]',p).forEach(b=>b.onclick=()=>{if(f.kind===b.dataset.kind)return;f.kind=b.dataset.kind;f.cat=null;if(!tx)f.acct=lastAcct(f.kind);f.amount=amtEl.value;draw(p)});
-    $$('[data-cat]',p).forEach(b=>b.onclick=()=>{f.cat=b.dataset.cat;$$('[data-cat]',p).forEach(x=>x.classList.toggle('on',x===b));note()});
+    $$('[data-kind]',p).forEach(b=>b.onclick=()=>{if(f.kind===b.dataset.kind)return;f.kind=b.dataset.kind;f.cat=null;if(!tx){f.acct=lastAcct(f.kind);if(!envTouched)f.env=''}f.amount=amtEl.value;draw(p)});
+    $$('[data-cat]',p).forEach(b=>b.onclick=()=>{f.cat=b.dataset.cat;$$('[data-cat]',p).forEach(x=>x.classList.toggle('on',x===b));
+      if(!envTouched&&f.kind==='expense'){f.env=envForCat(f.cat);const s2=$('#fEnv',p);if(s2)s2.value=f.env}note();envNote()});
     $('#fSave',p).onclick=()=>{
       const amt=parseAmt(amtEl.value);
       if(!(amt>0))return toast('Enter an amount');
@@ -525,7 +550,9 @@ function openEntrySheet({kind='expense',cat=null,date=today(),tx=null}={}){
       if(!f.date)return toast('Pick a date');
       const t={kind:f.kind,amount:amt,date:f.date,cat:f.cat,note:(f.note||'').trim()};
       if(f.acct&&acctById(f.acct))t.acct=f.acct;
+      if(f.env&&goalById(f.env))t.env=f.env;
       if(!tx)rememberAcct(f.kind,f.acct);
+      if(f.kind==='expense'&&envTouched)rememberEnv(f.cat,f.env);
       if(tx){t.id=tx.id;t.created=tx.created;updateTx(tx,t);closeSheet();toast('Saved');return}
       const saved=addTx(t);closeSheet();
       const cc=catById(t.cat);let msg=`Added ${money(t.amount)} · ${cc?.name||''}`;
@@ -768,7 +795,7 @@ function txRow(t){
     return `<div class="it" data-tx="${t.id}"><div class="ic">⇄</div><div class="mid"><div class="t">${esc(title)}</div>${sub?`<div class="s">${esc(sub)}</div>`:''}</div><div class="amt num mut">${money(t.amount)}</div></div>`;
   }
   const c=catById(t.cat),a=acctById(t.acct);
-  const sub=[t.note,a?a.name:''].filter(Boolean).join(' · ');
+  const ev=t.env?goalById(t.env):null;const sub=[t.note,a?a.name:'',ev?'✉ '+ev.name:''].filter(Boolean).join(' · ');
   return `<div class="it" data-tx="${t.id}"><div class="ic">${esc(c?.emo||'•')}</div><div class="mid"><div class="t">${esc(c?.name||'Uncategorized')}</div>${sub?`<div class="s">${esc(sub)}</div>`:''}</div><div class="amt num ${t.kind==='income'?'pos':''}">${t.kind==='income'?'+':'−'}${money(t.amount)}</div></div>`;
 }
 function openTxItem(t){if(!t)return;if(t.kind==='transfer')openTransferSheet(t);else if(t.kind==='expense'||t.kind==='income')openEntrySheet({tx:t})}
@@ -1040,7 +1067,7 @@ function openAllocateSheet(){
 }
 function openGoalSheet(g,preset){
   const isNew=!g;g=g?clone(g):{id:genId(),name:preset?.name||'',emo:preset?.emo||'💰',target:0,saved:0,date:'',log:[],created:Date.now()};
-  const log=(g.log||[]).slice().sort((a,b)=>a.d<b.d?1:-1);
+  const log=(g.log||[]).map((l,i)=>({...l,_i:i})).sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:b._i-a._i);
   const showTarget=!isNew?hasTarget(g):!!preset?.goal;
   openSheet(isNew?'New envelope':`${esc(g.emo)} ${esc(g.name)}`,`
     <label class="field"><span>Name</span><input class="inp" id="gName" value="${esc(g.name)}" placeholder="e.g. Italy trip, Emergency fund"></label>
@@ -1051,7 +1078,7 @@ function openGoalSheet(g,preset){
     ${isNew?`<label class="field"><span>Put in now (optional)</span><input class="inp num" id="gSaved" inputmode="decimal" placeholder="0.00"></label><p class="hint">Comes out of Ready to allocate (${money(allocation().ready)}).</p>`:''}
     <div id="gCalc" class="hint" style="min-height:18px;margin-top:10px"></div>
     <button class="btn primary" id="gSave">${isNew?'Create':'Save'}</button>
-    ${!isNew?`${log.length?`<h2 class="sec">History</h2><div class="list">${log.map(l=>`<div class="it" style="cursor:default"><div class="ic">${l.amt>0?'＋':'−'}</div><div class="mid"><div class="t">${l.amt>0?'Added':'Took out'}</div><div class="s">${dayLabel(l.d)}${l.note?' · '+esc(l.note):''}</div></div><div class="amt num ${l.amt>0?'pos':'neg'}">${l.amt>0?'+':'−'}${money(Math.abs(l.amt))}</div></div>`).join('')}</div>`:''}
+    ${!isNew?`${log.length?`<h2 class="sec">History</h2><div class="list">${log.map(l=>`<div class="it" data-li="${l._i}"><div class="ic">${l.tx?'🧾':l.amt>0?'＋':'−'}</div><div class="mid"><div class="t">${l.tx?(l.amt>0?'Income':'Spent'):l.amt>0?'Added':'Took out'}</div><div class="s">${dayLabel(l.d)}${l.note?' · '+esc(l.note):''}</div></div><div class="amt num ${l.amt>0?'pos':'neg'}">${l.amt>0?'+':'−'}${money(Math.abs(l.amt))}</div><span class="mut">›</span></div>`).join('')}</div><p class="hint">Tap an entry to fix or delete it.</p>`:''}
       <button class="btn danger" id="gDel" style="width:100%;margin-top:16px">Delete envelope</button><p class="hint">Any money in it goes back to Ready to allocate.</p>`:''}`,p=>{
     $$('[data-e]',p).forEach(b=>b.onclick=()=>{g.emo=b.dataset.e;$$('[data-e]',p).forEach(x=>x.classList.toggle('on',x===b))});
     const ht=$('#gHasT',p);
@@ -1068,7 +1095,39 @@ function openGoalSheet(g,preset){
       saveGoals(list);closeSheet();toast(isNew?`${g.name} created`:'Saved');
     };
     const d=$('#gDel',p);if(d){let armed=false;d.onclick=()=>{if(!armed){armed=true;d.textContent='Tap again to delete';return}saveGoals(goals().filter(x=>x.id!==g.id));closeSheet();toast('Deleted')}}
+    $$('[data-li]',p).forEach(r=>r.onclick=()=>{
+      const live=goalById(g.id);const l=live&&(live.log||[])[+r.dataset.li];if(!l)return;
+      if(l.tx){const t=allTx().find(x=>x.id===l.tx);if(t){openEntrySheet({tx:t});return}}
+      openLogEntrySheet(live,+r.dataset.li);
+    });
     if(isNew&&!g.name)setTimeout(()=>$('#gName',p).focus(),50);
+  });
+}
+function openLogEntrySheet(g,idx){
+  const l=g.log[idx];let sign=l.amt<0?-1:1;
+  openSheet('Edit entry',`
+    <div class="seg"><button type="button" data-s="1" class="${sign>0?'on':''}">Added</button><button type="button" data-s="-1" class="${sign<0?'on':''}">Took out</button></div>
+    <div class="amount-wrap"><span class="cur serif">$</span><input id="lAmt" inputmode="decimal" autocomplete="off" value="${Math.abs(l.amt)}" aria-label="Amount"></div>
+    <label class="field"><span>Date</span><input type="date" class="inp" id="lDate" value="${l.d}"></label>
+    <label class="field"><span>Note (optional)</span><input class="inp" id="lNote" value="${esc(l.note||'')}"></label>
+    <button class="btn primary" id="lSave">Save changes</button>
+    <button class="btn danger" id="lDel" style="width:100%;margin-top:10px">Delete entry</button>
+    <p class="hint">Deleting removes it from the history and undoes it, as if it never happened.</p>`,p=>{
+    $$('[data-s]',p).forEach(b=>b.onclick=()=>{sign=+b.dataset.s;$$('[data-s]',p).forEach(x=>x.classList.toggle('on',x===b))});
+    const finish=(newLog,msg)=>{
+      const ng=clone(goalById(g.id));
+      ng.saved=Math.round(newLog.reduce((s,x)=>s+x.amt,0)*100)/100+Math.round(((+g.saved||0)-g.log.reduce((s,x)=>s+x.amt,0))*100)/100;
+      ng.saved=Math.round(ng.saved*100)/100;ng.log=newLog;
+      saveGoals(goals().map(x=>x.id===g.id?ng:x));closeSheet();toast(msg);
+    };
+    $('#lSave',p).onclick=()=>{
+      const v=parseAmt($('#lAmt',p).value);if(!(v>0))return toast('Enter an amount');
+      const nl=g.log.map((x,i)=>i===idx?{...x,amt:sign*v,d:$('#lDate',p).value||x.d,note:$('#lNote',p).value.trim()}:x);
+      finish(nl,'Entry updated');
+    };
+    let armed=false;$('#lDel',p).onclick=e=>{if(!armed){armed=true;e.target.textContent='Tap again to delete';return}
+      finish(g.log.filter((x,i)=>i!==idx),'Entry deleted');
+    };
   });
 }
 function openMoneySheet(g,sign){
